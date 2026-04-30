@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 REPO_OWNER = "paradies800"
-REPO_NAME = "PylaAI-xxz"
+REPO_NAME = "PylaAi-XXZ"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 MAIN_BRANCH_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/main"
 MAIN_BRANCH_ZIP = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/archive/refs/heads/main.zip"
