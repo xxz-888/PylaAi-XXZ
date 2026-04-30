@@ -37,6 +37,12 @@ class LongRunWatchdogTests(unittest.TestCase):
 
         self.assertFalse(controller.restart_emulator_profile())
 
+    def test_restart_brawl_stars_returns_false_when_adb_is_offline(self):
+        controller = object.__new__(WindowController)
+        controller.ensure_emulator_online = lambda: False
+
+        self.assertFalse(controller.restart_brawl_stars())
+
     def test_slow_feed_fallback_lowers_capture_load_without_config_change(self):
         controller = object.__new__(WindowController)
         controller.scrcpy_max_width = 960

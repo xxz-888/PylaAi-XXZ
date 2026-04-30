@@ -718,7 +718,7 @@ class WindowController:
 
     def ensure_emulator_online(self):
         serial = getattr(self, "connected_serial", "") or getattr(self, "configured_serial", "")
-        if _is_adb_serial_online(serial):
+        if self.is_emulator_online():
             return True
         try:
             if self.device.get_state() == "device":
@@ -730,6 +730,12 @@ class WindowController:
             return False
 
         return self.restart_emulator_profile()
+
+    def is_emulator_online(self):
+        serial = getattr(self, "connected_serial", "") or getattr(self, "configured_serial", "")
+        if not serial:
+            return False
+        return _is_adb_serial_online(serial)
 
     def restart_emulator_profile(self):
         now = time.time()
@@ -886,7 +892,9 @@ class WindowController:
             return self.frame_id
 
     def restart_brawl_stars(self):
-        self.ensure_emulator_online()
+        if not self.ensure_emulator_online():
+            print("Cannot restart Brawl Stars because the emulator ADB device is offline.")
+            return False
         try:
             self.keys_up(list("wasd"))
         except Exception:
@@ -896,14 +904,23 @@ class WindowController:
                 self.device.app_stop(self.brawl_stars_package)
         except Exception as e:
             print(f"Could not stop Brawl Stars cleanly: {e}")
-            self.restart_emulator_profile()
+            if not self.restart_emulator_profile():
+                return False
         time.sleep(1)
-        if not _start_android_app(self.connected_serial, self.brawl_stars_package):
-            self.device.app_start(self.brawl_stars_package)
+        try:
+            if not _start_android_app(self.connected_serial, self.brawl_stars_package):
+                self.device.app_start(self.brawl_stars_package)
+        except Exception as e:
+            print(f"Could not start Brawl Stars because ADB is offline: {e}")
+            if not self.restart_emulator_profile():
+                return False
+            if not _start_android_app(self.connected_serial, self.brawl_stars_package):
+                self.device.app_start(self.brawl_stars_package)
         time.sleep(3)
         self.time_since_checked_if_brawl_stars_crashed = time.time()
         self.foreground_check_failures = 0
         print("Brawl stars restarted successfully.")
+        return True
 
     def foreground_package(self, timeout=4):
         return _get_foreground_package(self.connected_serial, timeout=timeout)

@@ -129,6 +129,7 @@ def pyla_main(data):
             self.low_feed_since = None
             self.low_feed_last_recovery = 0.0
             self.slow_feed_recovery_attempts = 0
+            self.last_offline_emulator_message = 0.0
             self.perf_last_frame_id = -1
             self.perf_last_frame_time = time.time()
             self.perf_frame_count = 0
@@ -159,7 +160,8 @@ def pyla_main(data):
             return loaded_models
 
         def restart_brawl_stars(self):
-            self.window_controller.restart_brawl_stars()
+            if not self.window_controller.restart_brawl_stars():
+                return False
             self.window_controller.restart_scrcpy_client()
             self.reset_visual_freeze_watchdog()
             self.reset_low_ips_watchdog(recovered=False)
@@ -192,6 +194,7 @@ def pyla_main(data):
                 self.window_controller.close()
                 import sys
                 sys.exit(1)
+            return True
 
         def reset_visual_freeze_watchdog(self):
             self.last_visual_sample = None
@@ -481,11 +484,49 @@ def pyla_main(data):
                 time.sleep(3)
             return True
 
+        def handle_offline_emulator(self):
+            now = time.time()
+            if now - self.last_offline_emulator_message > 10:
+                if self.window_controller.emulator_autorestart:
+                    remaining = max(
+                        0,
+                        self.window_controller.emulator_restart_cooldown
+                        - (now - self.window_controller.last_emulator_restart_time),
+                    )
+                    if remaining > 0:
+                        print(f"Emulator ADB is offline; waiting {remaining:.0f}s before the next profile restart attempt.")
+                    else:
+                        print("Emulator ADB is offline; trying to restart the saved emulator profile.")
+                else:
+                    print("Emulator ADB is offline and auto-restart is disabled; waiting for the emulator to come back online.")
+                self.last_offline_emulator_message = now
+
+            if self.window_controller.emulator_autorestart:
+                remaining = (
+                    self.window_controller.emulator_restart_cooldown
+                    - (now - self.window_controller.last_emulator_restart_time)
+                )
+                if remaining <= 0:
+                    if self.window_controller.restart_emulator_profile():
+                        self.reset_visual_freeze_watchdog()
+                        self.reset_low_ips_watchdog(recovered=False)
+                        self.last_processed_frame_id = -1
+                        self.Play.time_since_detections["player"] = time.time()
+                        self.Play.time_since_detections["enemy"] = time.time()
+                        self.Play.time_since_player_last_found = time.time()
+            time.sleep(2)
+
         def handle_stale_scrcpy_feed(self, frame_time=None):
             now = time.time()
             stale_age = now - frame_time if frame_time else 0
             age_text = f"{stale_age:.1f}s old" if frame_time else "missing"
             self.Play.window_controller.keys_up(list("wasd"))
+
+            if not self.window_controller.is_emulator_online():
+                self.handle_offline_emulator()
+                self.stale_feed_recovery_attempts = 0
+                self.last_stale_feed_recovery = now
+                return
 
             if now - self.last_stale_feed_recovery < 5:
                 if now - self.last_stale_feed_message > 2:
@@ -499,8 +540,8 @@ def pyla_main(data):
 
             if self.stale_feed_recovery_attempts >= 3 or stale_age > 45:
                 print("Scrcpy feed is still frozen; restarting Brawl Stars and scrcpy.")
-                self.restart_brawl_stars()
-                self.stale_feed_recovery_attempts = 0
+                if self.restart_brawl_stars():
+                    self.stale_feed_recovery_attempts = 0
             else:
                 print(f"Scrcpy frame is {age_text}; restarting scrcpy feed.")
                 self.window_controller.restart_scrcpy_client()
@@ -579,7 +620,8 @@ def pyla_main(data):
                         time.perf_counter() - screenshot_start,
                     )
                 except ConnectionError as e:
-                    print(f"{e} Recovering scrcpy feed.")
+                    if self.window_controller.is_emulator_online():
+                        print(f"{e} Recovering scrcpy feed.")
                     self.handle_stale_scrcpy_feed()
                     continue
 
