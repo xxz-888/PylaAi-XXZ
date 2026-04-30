@@ -31,6 +31,7 @@ class BrawlerApiAutofillTest(unittest.TestCase):
 
     def test_failed_auto_refresh_does_not_mark_refresh_done(self):
         utils._brawl_stars_api_refresh_done = False
+        utils._brawl_stars_api_refresh_signature = None
         config = {
             "auto_refresh_token": True,
             "developer_email": "",
@@ -41,6 +42,36 @@ class BrawlerApiAutofillTest(unittest.TestCase):
             utils.refresh_brawl_stars_api_token_if_enabled(config)
 
         self.assertFalse(utils._brawl_stars_api_refresh_done)
+
+    @patch("utils.save_dict_as_toml")
+    @patch("utils.get_public_ip", return_value="1.2.3.4")
+    @patch("utils._developer_api_post")
+    def test_auto_refresh_retries_when_previous_check_had_no_token(self, mock_post, _mock_ip, _mock_save):
+        utils._brawl_stars_api_refresh_done = True
+        utils._brawl_stars_api_refresh_signature = ("cfg/brawl_stars_api.toml", "old", "old", "#OLD")
+        mock_post.side_effect = [
+            {},
+            {"developer": {"allowedScopes": ["brawlstars"]}},
+            {"keys": []},
+            {"key": {"key": "NEW_TOKEN"}},
+        ]
+        config = {
+            "auto_refresh_token": True,
+            "developer_email": "user@example.com",
+            "developer_password": "secret",
+            "player_tag": "#PLAYER",
+            "api_token": "",
+            "timeout_seconds": 15,
+        }
+
+        refreshed = utils.refresh_brawl_stars_api_token_if_enabled(config)
+
+        self.assertEqual(refreshed["api_token"], "NEW_TOKEN")
+        self.assertTrue(utils._brawl_stars_api_refresh_done)
+        self.assertEqual(
+            utils._brawl_stars_api_refresh_signature,
+            ("cfg/brawl_stars_api.toml", "user@example.com", "secret", "#PLAYER"),
+        )
 
     @patch("utils.refresh_brawl_stars_api_token_if_enabled")
     def test_api_config_is_reloaded_fresh(self, mock_refresh):

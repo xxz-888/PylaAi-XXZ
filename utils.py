@@ -18,6 +18,7 @@ from packaging import version
 
 DEVELOPER_API_BASE_URL = "https://developer.brawlstars.com/api/"
 _brawl_stars_api_refresh_done = False
+_brawl_stars_api_refresh_signature = None
 
 
 def _config_bool(value, default=False):
@@ -68,17 +69,27 @@ def get_public_ip(service_url="https://api.ipify.org"):
 
 
 def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_api.toml"):
-    global _brawl_stars_api_refresh_done
-    if _brawl_stars_api_refresh_done:
-        return config
-
+    global _brawl_stars_api_refresh_done, _brawl_stars_api_refresh_signature
     if not _config_bool(config.get("auto_refresh_token"), False):
         _brawl_stars_api_refresh_done = True
         return config
 
     email = str(config.get("developer_email", "")).strip()
     password = str(config.get("developer_password", "")).strip()
+    player_tag = str(config.get("player_tag", "")).strip()
+    existing_token = _extract_api_token(config.get("api_token", ""))
+    refresh_signature = (str(file_path), email, password, player_tag)
+
+    if (
+            _brawl_stars_api_refresh_done
+            and _brawl_stars_api_refresh_signature == refresh_signature
+            and existing_token
+    ):
+        return config
+
     if not email or not password:
+        _brawl_stars_api_refresh_done = False
+        _brawl_stars_api_refresh_signature = None
         raise ValueError(
             "auto_refresh_token is enabled, but developer_email/developer_password are missing. "
             "Open cfg/brawl_stars_api.toml and fill developer_email, developer_password, and player_tag."
@@ -130,6 +141,7 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
     config["last_public_ip"] = public_ip
     save_dict_as_toml(config, file_path)
     _brawl_stars_api_refresh_done = True
+    _brawl_stars_api_refresh_signature = refresh_signature
     print(f"Refreshed Brawl Stars API token for public IP {public_ip}.")
     return config
 
