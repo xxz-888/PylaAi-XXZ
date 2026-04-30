@@ -11,7 +11,7 @@ import ctypes
 from pathlib import Path
 
 
-REPO_OWNER = "paradies800"
+REPO_OWNER = "xxz-888"
 REPO_NAME = "PylaAi-XXZ"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 MAIN_BRANCH_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/main"
