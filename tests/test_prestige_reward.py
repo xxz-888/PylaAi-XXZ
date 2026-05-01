@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 from stage_manager import StageManager
-from state_finder import is_in_prestige_reward
+from state_finder import get_prestige_next_button_center, is_in_prestige_reward
 
 
 class DummyTrophyObserver:
@@ -49,8 +49,8 @@ class DummyWindowController:
 
 
 class PrestigeRewardTests(unittest.TestCase):
-    def test_prestige_reward_detector_requires_green_next_and_purple_badge(self):
-        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    @staticmethod
+    def draw_prestige_screen(image, button_box=(1240, 930, 340, 100)):
         green = cv2.cvtColor(
             np.full((1, 1, 3), (60, 220, 220), dtype=np.uint8),
             cv2.COLOR_HSV2BGR,
@@ -59,10 +59,27 @@ class PrestigeRewardTests(unittest.TestCase):
             np.full((1, 1, 3), (140, 180, 180), dtype=np.uint8),
             cv2.COLOR_HSV2BGR,
         )[0, 0]
-        image[930:1030, 1240:1580] = green
-        image[180:700, 1120:1700] = purple
-        image[940:975, 1360:1460] = (255, 255, 255)
+        blue = cv2.cvtColor(
+            np.full((1, 1, 3), (112, 220, 220), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        image[140:700, 1080:1700] = purple
+        image[170:580, 1160:1600] = blue
+        x, y, w, h = button_box
+        image[y:y + h, x:x + w] = green
+        image[y + 25:y + 60, x + 120:x + 220] = (255, 255, 255)
+
+    def test_prestige_reward_detector_requires_green_next_and_purple_badge(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.draw_prestige_screen(image)
         self.assertTrue(is_in_prestige_reward(image))
+
+    def test_prestige_reward_detector_accepts_new_higher_next_button_layout(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.draw_prestige_screen(image, button_box=(1140, 840, 280, 105))
+
+        self.assertTrue(is_in_prestige_reward(image))
+        self.assertEqual(get_prestige_next_button_center(image), (1280, 892))
 
     def test_prestige_reward_detector_rejects_match_noise_without_next_text(self):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -78,7 +95,7 @@ class PrestigeRewardTests(unittest.TestCase):
         image[180:700, 1120:1700] = purple
         self.assertFalse(is_in_prestige_reward(image))
 
-    def test_prestige_reward_advances_queue_and_selects_lowest(self):
+    def test_prestige_reward_clicks_detected_next_button_advances_queue_and_selects_lowest(self):
         manager = object.__new__(StageManager)
         manager.brawlers_pick_data = [
             {"brawler": "gray", "trophies": 990, "push_until": 1000, "wins": 0, "win_streak": 0},
@@ -87,16 +104,42 @@ class PrestigeRewardTests(unittest.TestCase):
         manager.Trophy_observer = DummyTrophyObserver()
         manager.Lobby_automation = DummyLobbyAutomation()
         manager.window_controller = DummyWindowController()
+        screenshot_bgr = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.draw_prestige_screen(screenshot_bgr, button_box=(1140, 840, 280, 105))
+        manager.window_controller.screenshot = lambda: cv2.cvtColor(screenshot_bgr, cv2.COLOR_BGR2RGB)
 
-        with patch("stage_manager.is_in_prestige_reward", return_value=True), \
-                patch("stage_manager.get_state", return_value="lobby"), \
+        with patch("stage_manager.get_state", return_value="lobby"), \
+                patch.object(manager, "read_lobby_trophies_from_screenshot", return_value=0), \
                 patch("stage_manager.save_brawler_data"):
             manager.handle_prestige_reward()
 
         self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "shelly")
         self.assertEqual(manager.Trophy_observer.current_trophies, 20)
         self.assertTrue(manager.Lobby_automation.lowest_selected)
-        self.assertIn((1410, 990), manager.window_controller.clicks)
+        self.assertIn((1280, 892), manager.window_controller.clicks)
+
+    def test_prestige_reward_does_not_force_switch_when_lobby_trophies_are_not_reset(self):
+        manager = object.__new__(StageManager)
+        manager.brawlers_pick_data = [
+            {"brawler": "gray", "trophies": 249, "push_until": 250, "wins": 0, "win_streak": 0},
+            {"brawler": "shelly", "trophies": 20, "push_until": 250, "wins": 0, "win_streak": 0},
+        ]
+        manager.Trophy_observer = DummyTrophyObserver()
+        manager.Lobby_automation = DummyLobbyAutomation()
+        manager.window_controller = DummyWindowController()
+        screenshot_bgr = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.draw_prestige_screen(screenshot_bgr, button_box=(1140, 840, 280, 105))
+        manager.window_controller.screenshot = lambda: cv2.cvtColor(screenshot_bgr, cv2.COLOR_BGR2RGB)
+
+        with patch("stage_manager.get_state", return_value="lobby"), \
+                patch.object(manager, "read_lobby_trophies_from_screenshot", return_value=250), \
+                patch("stage_manager.save_brawler_data"):
+            manager.handle_prestige_reward()
+
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "gray")
+        self.assertEqual(manager.Trophy_observer.current_trophies, 250)
+        self.assertFalse(manager.Lobby_automation.lowest_selected)
+        self.assertIn((1280, 892), manager.window_controller.clicks)
 
 
 if __name__ == "__main__":

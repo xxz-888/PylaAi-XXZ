@@ -197,7 +197,7 @@ def main():
 
     env = os.environ.copy()
     env["PYLAAI_SETUP_AUTO"] = "1"
-    run(python_command + ["setup.py", "install"], cwd=project_dir, env=env)
+    run(python_command + ["setup.py", "--pyla-install"], cwd=project_dir, env=env)
     create_run_file(project_dir, python_command)
 
     print("")

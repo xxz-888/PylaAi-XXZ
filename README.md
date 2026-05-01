@@ -38,7 +38,7 @@ For normal users, you only need `setup.exe`.
 
 Manual developer setup:
 - Install Python 3.11 and Git.
-- Run `python setup.py install`.
+- Run `python setup.py --pyla-install`.
 - Run `python main.py`.
 
 Brawl Stars API trophy autofill :

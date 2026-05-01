@@ -165,7 +165,10 @@ def pyla_main(data):
         def restart_brawl_stars(self):
             if not self.window_controller.restart_brawl_stars():
                 return False
-            self.window_controller.restart_scrcpy_client()
+            if not self.window_controller.restart_scrcpy_client():
+                print("Brawl Stars restarted, but scrcpy did not recover yet.")
+                self.handle_offline_emulator()
+                return False
             self.reset_visual_freeze_watchdog()
             self.reset_low_ips_watchdog(recovered=False)
             gc.collect()
@@ -284,7 +287,9 @@ def pyla_main(data):
             self.window_controller.keys_up(list("wasd"))
             if self.slow_feed_recovery_attempts >= 2:
                 self.window_controller.reduce_capture_load_for_slow_feed()
-            self.window_controller.restart_scrcpy_client()
+            if not self.window_controller.restart_scrcpy_client():
+                self.handle_offline_emulator()
+                return False
             self.last_processed_frame_id = -1
             self.perf_duplicate_waits = 0
             self.low_feed_since = now
@@ -339,7 +344,8 @@ def pyla_main(data):
                         self.low_ips_recovery_attempts = 0
                     else:
                         print("Emulator restart was not available; keeping bot alive and retrying scrcpy recovery.")
-                        self.window_controller.restart_scrcpy_client()
+                        if not self.window_controller.restart_scrcpy_client():
+                            self.handle_offline_emulator()
                         self.low_ips_recovery_attempts = max(
                             self.low_ips_app_restart_after,
                             self.low_ips_emulator_restart_after - 1,
@@ -349,7 +355,8 @@ def pyla_main(data):
                 self.restart_brawl_stars()
             else:
                 print("Low IPS detected; restarting scrcpy feed.")
-                self.window_controller.restart_scrcpy_client()
+                if not self.window_controller.restart_scrcpy_client():
+                    self.handle_offline_emulator()
 
             self.last_processed_frame_id = -1
             self.low_ips_since = now
@@ -547,7 +554,8 @@ def pyla_main(data):
                     self.stale_feed_recovery_attempts = 0
             else:
                 print(f"Scrcpy frame is {age_text}; restarting scrcpy feed.")
-                self.window_controller.restart_scrcpy_client()
+                if not self.window_controller.restart_scrcpy_client():
+                    self.handle_offline_emulator()
 
         def handle_pause_control(self):
             if not self.control_window.is_paused():

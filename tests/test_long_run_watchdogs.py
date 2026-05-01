@@ -62,6 +62,23 @@ class LongRunWatchdogTests(unittest.TestCase):
 
         self.assertFalse(controller.reduce_capture_load_for_slow_feed())
 
+    def test_restart_scrcpy_client_returns_false_when_start_fails_offline(self):
+        controller = object.__new__(WindowController)
+        controller.scrcpy_client = None
+        controller.scrcpy_generation = 0
+        controller.is_emulator_online = lambda: False
+        controller.ensure_calls = 0
+
+        def ensure_emulator_online():
+            controller.ensure_calls += 1
+            return controller.ensure_calls == 1
+
+        controller.ensure_emulator_online = ensure_emulator_online
+        controller.start_scrcpy_client = lambda: (_ for _ in ()).throw(Exception("device offline"))
+
+        self.assertFalse(controller.restart_scrcpy_client())
+        self.assertEqual(controller.ensure_calls, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

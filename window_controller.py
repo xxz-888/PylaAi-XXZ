@@ -765,7 +765,11 @@ class WindowController:
                 )
                 return False
         time.sleep(3)
-        self.start_scrcpy_client()
+        try:
+            self.start_scrcpy_client()
+        except Exception as e:
+            print(f"Could not restart scrcpy after emulator profile launch: {e}")
+            return False
         if not _start_android_app(self.connected_serial, self.brawl_stars_package):
             self.device.app_start(self.brawl_stars_package)
         time.sleep(3)
@@ -845,7 +849,14 @@ class WindowController:
             if stop_thread.is_alive():
                 print("Old scrcpy client did not stop within 2s; starting a new client anyway.")
         time.sleep(0.4)
-        self.start_scrcpy_client()
+        try:
+            self.start_scrcpy_client()
+        except Exception as e:
+            print(f"Could not restart scrcpy client: {e}")
+            if not self.is_emulator_online():
+                print("ADB went offline while starting scrcpy; entering emulator recovery.")
+                self.ensure_emulator_online()
+            return False
         print("Scrcpy client restarted successfully.")
         return True
 

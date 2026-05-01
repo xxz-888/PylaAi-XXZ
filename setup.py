@@ -174,6 +174,14 @@ def setup_pyla():
     print(f"  - Accel Status:     {status_accel}")
     print("="*50 + "\n")
 
+if "--pyla-install" in sys.argv:
+    try:
+        setup_pyla()
+    except Exception as e:
+        print(f"\n[ERROR] {e}")
+        sys.exit(1)
+    sys.exit(0)
+
 setup(
     name="PylaAi-XXZ", version="1.0.0",
     packages=find_packages(exclude=["api", "cfg", "models", "typization"]),
@@ -181,5 +189,9 @@ setup(
 )
 
 if any(cmd in sys.argv for cmd in ["install", "develop"]):
+    print(
+        "\nWARNING: 'setup.py install' is deprecated. "
+        "Run 'python setup.py --pyla-install' or setup.exe instead."
+    )
     try: setup_pyla()
     except Exception as e: print(f"\n[ERROR] {e}"); sys.exit(1)

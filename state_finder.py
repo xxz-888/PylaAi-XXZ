@@ -212,62 +212,77 @@ def count_hsv_in_region(image, region, lower, upper):
     return int(cv2.countNonZero(mask))
 
 
-def is_in_prestige_reward(image):
+def get_prestige_next_button_center(image):
     current_height, current_width = image.shape[:2]
     width_ratio = current_width / orig_screen_width
     height_ratio = current_height / orig_screen_height
 
-    button_region = [1210, 895, 360, 135]
+    button_region = [1040, 760, 620, 250]
     x = int(button_region[0] * width_ratio)
     y = int(button_region[1] * height_ratio)
     w = int(button_region[2] * width_ratio)
     h = int(button_region[3] * height_ratio)
     button_crop = image[y:y + h, x:x + w]
     if button_crop.size == 0:
-        return False
+        return None
 
     hsv = cv2.cvtColor(button_crop, cv2.COLOR_BGR2HSV)
     green_mask = cv2.inRange(
         hsv,
-        np.array((50, 150, 130), dtype=np.uint8),
+        np.array((45, 120, 110), dtype=np.uint8),
         np.array((72, 255, 255), dtype=np.uint8),
     )
     contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        return False
-    largest = max(contours, key=cv2.contourArea)
-    area = cv2.contourArea(largest)
-    bx, by, bw, bh = cv2.boundingRect(largest)
-    crop_area = max(1, button_crop.shape[0] * button_crop.shape[1])
-    green_ratio = cv2.countNonZero(green_mask) / crop_area
-    if area < crop_area * 0.35 or green_ratio < 0.30 or bw < w * 0.55 or bh < h * 0.35:
-        return False
+        return None
 
-    text_region = [1320, 930, 180, 55]
-    tx = int(text_region[0] * width_ratio)
-    ty = int(text_region[1] * height_ratio)
-    tw = int(text_region[2] * width_ratio)
-    th = int(text_region[3] * height_ratio)
-    text_crop = image[ty:ty + th, tx:tx + tw]
-    if text_crop.size == 0:
-        return False
-    text_hsv = cv2.cvtColor(text_crop, cv2.COLOR_BGR2HSV)
-    white_mask = cv2.inRange(
-        text_hsv,
-        np.array((0, 0, 180), dtype=np.uint8),
-        np.array((179, 90, 255), dtype=np.uint8),
-    )
-    white_pixels = cv2.countNonZero(white_mask)
-    if white_pixels < max(120, int(text_crop.shape[0] * text_crop.shape[1] * 0.08)):
+    min_area = max(400, button_crop.shape[0] * button_crop.shape[1] * 0.04)
+    candidates = []
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        bx, by, bw, bh = cv2.boundingRect(contour)
+        if area < min_area or bw < w * 0.20 or bh < h * 0.15:
+            continue
+        button_part = button_crop[by:by + bh, bx:bx + bw]
+        if button_part.size == 0:
+            continue
+        text_hsv = cv2.cvtColor(button_part, cv2.COLOR_BGR2HSV)
+        white_mask = cv2.inRange(
+            text_hsv,
+            np.array((0, 0, 160), dtype=np.uint8),
+            np.array((179, 100, 255), dtype=np.uint8),
+        )
+        white_pixels = cv2.countNonZero(white_mask)
+        if white_pixels < max(80, int(button_part.shape[0] * button_part.shape[1] * 0.02)):
+            continue
+        candidates.append((area, bx, by, bw, bh))
+
+    if not candidates:
+        return None
+
+    _, bx, by, bw, bh = max(candidates, key=lambda item: item[0])
+    return int(x + bx + bw / 2), int(y + by + bh / 2)
+
+
+def is_in_prestige_reward(image):
+    button_center = get_prestige_next_button_center(image)
+    if button_center is None:
         return False
 
     prestige_purple = count_hsv_in_region(
         image,
-        [1080, 140, 620, 570],
+        [980, 80, 760, 660],
         (124, 80, 90),
         (162, 255, 255),
     )
-    return prestige_purple > 35000
+    prestige_blue = count_hsv_in_region(
+        image,
+        [1060, 120, 650, 540],
+        (95, 80, 80),
+        (125, 255, 255),
+    )
+    scale = max(0.05, (image.shape[1] / orig_screen_width) * (image.shape[0] / orig_screen_height))
+    return prestige_purple > int(18000 * scale) and prestige_blue > int(12000 * scale)
 
 
 
