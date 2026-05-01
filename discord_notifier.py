@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import io
+from pathlib import Path
 import time
 from typing import Any
 
@@ -11,6 +12,10 @@ from discord import Webhook
 from PIL import Image
 
 from utils import _config_bool, load_toml_as_dict
+
+
+DISCORD_CONFIG_PATH = "cfg/discord_config.toml"
+LEGACY_WEBHOOK_CONFIG_PATH = "cfg/webhook_config.toml"
 
 
 _match_count = 0
@@ -56,7 +61,10 @@ RESULT_LABELS = {
 
 def load_webhook_settings() -> dict[str, Any]:
     general_config = load_toml_as_dict("cfg/general_config.toml")
-    webhook_config = dict(load_toml_as_dict("cfg/webhook_config.toml"))
+    config_path = DISCORD_CONFIG_PATH
+    if not Path(config_path).exists() and Path(LEGACY_WEBHOOK_CONFIG_PATH).exists():
+        config_path = LEGACY_WEBHOOK_CONFIG_PATH
+    webhook_config = dict(load_toml_as_dict(config_path))
     webhook_config["webhook_url"] = str(
         webhook_config.get("webhook_url") or general_config.get("personal_webhook", "")
     ).strip()
@@ -70,6 +78,13 @@ def load_webhook_settings() -> dict[str, Any]:
     webhook_config.setdefault("ping_when_target_is_reached", False)
     webhook_config.setdefault("ping_every_x_match", 0)
     webhook_config.setdefault("ping_every_x_minutes", 0)
+    webhook_config.setdefault("discord_control_enabled", False)
+    webhook_config["discord_bot_token"] = str(webhook_config.get("discord_bot_token", "")).strip()
+    webhook_config["discord_control_user_id"] = str(
+        webhook_config.get("discord_control_user_id") or webhook_config.get("discord_id", "")
+    ).strip().strip("<@!>")
+    webhook_config["discord_control_channel_id"] = str(webhook_config.get("discord_control_channel_id", "")).strip()
+    webhook_config["discord_control_guild_id"] = str(webhook_config.get("discord_control_guild_id", "")).strip()
     return webhook_config
 
 

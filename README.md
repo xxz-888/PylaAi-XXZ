@@ -67,6 +67,40 @@ Recovery features :
 - If the scrcpy video feed freezes, the bot restarts the scrcpy feed instead of repeatedly restarting Brawl Stars.
 - While the bot is running, a small `PylaAi-XXZ Control` window lets you pause and resume movement safely.
 
+Discord webhook and remote control :
+- Open `cfg/discord_config.toml`.
+- Webhook notifications only need `webhook_url`.
+- Discord `/start`, `/stop`, and `/status` need a Discord bot token, because normal webhooks cannot receive commands.
+- Create a bot token:
+  1. Go to https://discord.com/developers/applications
+  2. Click `New Application`.
+  3. Open `Bot`.
+  4. Click `Reset Token` or `View Token`, then copy it into `discord_bot_token`.
+  5. Keep this token private. Anyone with it can control the Discord bot.
+- Invite the bot to your server:
+  1. In the same Discord Developer Portal app, open `OAuth2` -> `URL Generator`.
+  2. Select scopes `bot` and `applications.commands`.
+  3. Select basic bot permissions such as `Send Messages` and `Use Slash Commands`.
+  4. Open the generated URL and invite it to your server.
+- Enable remote control:
+  `discord_control_enabled = true`
+- Get your Discord user ID:
+  1. In Discord, open `User Settings` -> `Advanced`.
+  2. Enable `Developer Mode`.
+  3. Right-click your Discord profile and click `Copy User ID`.
+  4. Paste it into `discord_control_user_id`. If this is blank, PylaAi-XXZ uses `discord_id`.
+- Get a channel ID:
+  1. With Developer Mode enabled, right-click the channel where commands should work.
+  2. Click `Copy Channel ID`.
+  3. Paste it into `discord_control_channel_id`.
+  4. Leave it blank if commands should work in any channel where the bot is invited.
+- Get a guild/server ID:
+  1. With Developer Mode enabled, right-click the server icon.
+  2. Click `Copy Server ID`.
+  3. Paste it into `discord_control_guild_id`.
+  4. Filling this makes slash commands appear faster because they sync to that server only.
+- Restart PylaAi-XXZ after changing the Discord bot token or remote-control settings.
+
 Performance troubleshooting :
 - Run `python tools/performance_check.py`.
 - If it says `CPUExecutionProvider`, run `setup.exe` again or set `cfg/general_config.toml` `cpu_or_gpu = "directml"`.

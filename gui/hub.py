@@ -4,6 +4,7 @@ import threading
 import webbrowser
 import os
 import pyautogui
+from pathlib import Path
 from PIL import Image
 import tkinter as tk
 from utils import load_toml_as_dict, save_dict_as_toml, get_discord_link, get_dpi_scale
@@ -46,13 +47,18 @@ class Hub:
         self.time_tresholds_path = "cfg/time_tresholds.toml"
         self.match_history_path = "cfg/match_history.toml"
         self.general_config_path = "cfg/general_config.toml"
-        self.webhook_config_path = "cfg/webhook_config.toml"
+        self.webhook_config_path = "cfg/discord_config.toml"
+        legacy_webhook_config_path = "cfg/webhook_config.toml"
 
         self.bot_config = load_toml_as_dict(self.bot_config_path)
         self.time_tresholds = load_toml_as_dict(self.time_tresholds_path)
         self.match_history = load_toml_as_dict(self.match_history_path)
         self.general_config = load_toml_as_dict(self.general_config_path)
-        self.webhook_config = load_toml_as_dict(self.webhook_config_path)
+        if not Path(self.webhook_config_path).exists() and Path(legacy_webhook_config_path).exists():
+            self.webhook_config = load_toml_as_dict(legacy_webhook_config_path)
+            save_dict_as_toml(self.webhook_config, self.webhook_config_path)
+        else:
+            self.webhook_config = load_toml_as_dict(self.webhook_config_path)
 
         # -----------------------------------------------------------------------------------------
         # Defaults
@@ -108,6 +114,11 @@ class Hub:
         self.webhook_config.setdefault("ping_when_target_is_reached", False)
         self.webhook_config.setdefault("ping_every_x_match", 0)
         self.webhook_config.setdefault("ping_every_x_minutes", 0)
+        self.webhook_config.setdefault("discord_control_enabled", False)
+        self.webhook_config.setdefault("discord_bot_token", "")
+        self.webhook_config.setdefault("discord_control_user_id", "")
+        self.webhook_config.setdefault("discord_control_channel_id", "")
+        self.webhook_config.setdefault("discord_control_guild_id", "")
 
         # -----------------------------------------------------------------------------------------
         # Appearance
@@ -162,7 +173,7 @@ class Hub:
         # Add tabs
         self.tab_overview = self.tabview.add("Overview")
         self.tab_additional = self.tabview.add("Additional Settings")
-        self.tab_webhook = self.tabview.add("Webhook")
+        self.tab_webhook = self.tabview.add("Discord")
         self.tab_timers = self.tabview.add("Timers")
         self.tab_history = self.tabview.add("Match History")
 
@@ -1076,7 +1087,7 @@ class Hub:
 
         row_idx = 0
 
-        def create_webhook_entry(label_text, config_key, convert_func=str, width=360):
+        def create_webhook_entry(label_text, config_key, convert_func=str, width=360, show=None):
             nonlocal row_idx
             lbl = ctk.CTkLabel(container, text=label_text, font=("Arial", S(18)))
             lbl.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
@@ -1090,7 +1101,7 @@ class Hub:
                 except ValueError:
                     var_str.set(str(self.webhook_config.get(config_key, "")))
 
-            entry = ctk.CTkEntry(container, textvariable=var_str, width=S(width), font=("Arial", S(16)))
+            entry = ctk.CTkEntry(container, textvariable=var_str, width=S(width), font=("Arial", S(16)), show=show)
             entry.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
             entry.bind("<FocusOut>", on_save)
             entry.bind("<Return>", on_save)
@@ -1128,21 +1139,26 @@ class Hub:
         create_webhook_toggle("Ping On Target:", "ping_when_target_is_reached")
         create_webhook_entry("Ping Every X Matches:", "ping_every_x_match", lambda s: 0 if s == "" else int(s), width=120)
         create_webhook_entry("Ping Every X Minutes:", "ping_every_x_minutes", lambda s: 0 if s == "" else int(s), width=120)
+        create_webhook_toggle("Discord Remote Control:", "discord_control_enabled")
+        create_webhook_entry("Bot Token:", "discord_bot_token", str, width=440, show="*")
+        create_webhook_entry("Allowed User ID:", "discord_control_user_id", str, width=220)
+        create_webhook_entry("Allowed Channel ID:", "discord_control_channel_id", str, width=220)
+        create_webhook_entry("Guild ID:", "discord_control_guild_id", str, width=220)
 
         webhook_status = ctk.CTkLabel(container, text="", font=("Arial", S(14)), text_color="#AAAAAA")
         webhook_status.grid(row=row_idx, column=0, columnspan=2, sticky="n", padx=S(20), pady=(S(6), 0))
         row_idx += 1
 
         def send_test_webhook():
-            webhook_status.configure(text="Sending test webhook...", text_color="#AAAAAA")
+            webhook_status.configure(text="Sending Discord test...", text_color="#AAAAAA")
 
             def worker():
                 try:
                     ok = asyncio.run(async_send_test_notification())
-                    message = "Test webhook sent." if ok else "Test webhook failed. Check URL and Discord permissions."
+                    message = "Discord test sent." if ok else "Discord test failed. Check URL and Discord permissions."
                     color = "#2ECC71" if ok else "#E74C3C"
                 except Exception as exc:
-                    message = f"Test webhook failed: {exc}"
+                    message = f"Discord test failed: {exc}"
                     color = "#E74C3C"
                 try:
                     self.app.after(0, lambda: webhook_status.configure(text=message, text_color=color))
@@ -1153,7 +1169,7 @@ class Hub:
 
         test_btn = ctk.CTkButton(
             container,
-            text="Send Test Webhook",
+            text="Send Discord Test",
             command=send_test_webhook,
             fg_color="#AA2A2A",
             hover_color="#BB3A3A",
@@ -1163,7 +1179,7 @@ class Hub:
             height=S(40)
         )
         test_btn.grid(row=row_idx, column=0, columnspan=2, padx=S(20), pady=S(12))
-        self.attach_tooltip(test_btn, "Sends a Discord test message using the current webhook settings.")
+        self.attach_tooltip(test_btn, "Sends a Discord test message using the current Discord settings.")
         row_idx += 1
 
         container.grid_columnconfigure(0, weight=1)

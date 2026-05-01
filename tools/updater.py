@@ -235,6 +235,8 @@ def restore_preserved_files(project_dir: Path, backup_dir: Path) -> None:
         if old_config.suffix.lower() not in (".toml", ".json") or not old_config.is_file():
             continue
         relative_path = old_config.relative_to(backup_dir)
+        if relative_path.as_posix().lower() == "cfg/webhook_config.toml":
+            relative_path = Path("cfg") / "discord_config.toml"
         destination = project_dir / relative_path
         if destination.exists() and old_config.suffix.lower() == ".toml":
             merged = merge_toml_text(

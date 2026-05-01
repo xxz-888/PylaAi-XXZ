@@ -14,6 +14,7 @@ from logger_setup import setup_logging_if_enabled
 setup_logging_if_enabled()
 
 import window_controller
+from discord_control import DiscordControlServer
 from gui.hub import Hub
 from gui.login import login
 from gui.main import App
@@ -141,6 +142,8 @@ def pyla_main(data):
             self.disconnect_ocr_interval = 6.0
             self.control_window = RuntimeControlWindow()
             self.control_window.start()
+            self.discord_control = DiscordControlServer(self.control_window.state_path)
+            self.discord_control.start()
             self.was_paused = False
             self.pause_started_at = None
 
@@ -677,6 +680,7 @@ def pyla_main(data):
                     if work_time < target_period:
                         time.sleep(target_period - work_time)
 
+            self.discord_control.close()
             self.control_window.close()
 
     main = Main()
