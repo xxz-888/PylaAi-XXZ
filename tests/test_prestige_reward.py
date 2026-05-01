@@ -95,6 +95,31 @@ class PrestigeRewardTests(unittest.TestCase):
         image[180:700, 1120:1700] = purple
         self.assertFalse(is_in_prestige_reward(image))
 
+    def test_prestige_reward_detector_rejects_match_noise_without_big_badge(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        green = cv2.cvtColor(
+            np.full((1, 1, 3), (60, 220, 220), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        purple = cv2.cvtColor(
+            np.full((1, 1, 3), (140, 180, 180), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        blue = cv2.cvtColor(
+            np.full((1, 1, 3), (112, 220, 220), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        image[80:700, 980:1740] = purple
+        # Broken-up blue patches can happen in match terrain/effects, but the
+        # reward screen has one large badge-shaped blue component.
+        for y in range(130, 600, 90):
+            for x in range(1080, 1660, 120):
+                image[y:y + 44, x:x + 56] = blue
+        image[840:945, 1140:1420] = green
+        image[865:900, 1260:1360] = (255, 255, 255)
+
+        self.assertFalse(is_in_prestige_reward(image))
+
     def test_prestige_reward_clicks_detected_next_button_advances_queue_and_selects_lowest(self):
         manager = object.__new__(StageManager)
         manager.brawlers_pick_data = [

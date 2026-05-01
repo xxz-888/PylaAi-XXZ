@@ -264,9 +264,51 @@ def get_prestige_next_button_center(image):
     return int(x + bx + bw / 2), int(y + by + bh / 2)
 
 
+def has_prestige_badge_shape(image):
+    current_height, current_width = image.shape[:2]
+    width_ratio = current_width / orig_screen_width
+    height_ratio = current_height / orig_screen_height
+    badge_region = [1060, 120, 680, 560]
+    x = int(badge_region[0] * width_ratio)
+    y = int(badge_region[1] * height_ratio)
+    w = int(badge_region[2] * width_ratio)
+    h = int(badge_region[3] * height_ratio)
+    crop = image[y:y + h, x:x + w]
+    if crop.size == 0:
+        return False
+
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    blue_mask = cv2.inRange(
+        hsv,
+        np.array((96, 90, 90), dtype=np.uint8),
+        np.array((126, 255, 255), dtype=np.uint8),
+    )
+    blue_mask = cv2.morphologyEx(
+        blue_mask,
+        cv2.MORPH_CLOSE,
+        np.ones((9, 9), dtype=np.uint8),
+    )
+    contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return False
+
+    scale = max(0.05, width_ratio * height_ratio)
+    min_area = int(22000 * scale)
+    min_width = int(180 * width_ratio)
+    min_height = int(160 * height_ratio)
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        bx, by, bw, bh = cv2.boundingRect(contour)
+        if area >= min_area and bw >= min_width and bh >= min_height:
+            return True
+    return False
+
+
 def is_in_prestige_reward(image):
     button_center = get_prestige_next_button_center(image)
     if button_center is None:
+        return False
+    if not has_prestige_badge_shape(image):
         return False
 
     prestige_purple = count_hsv_in_region(
