@@ -16,6 +16,7 @@ class PoisonGasAvoidanceTests(unittest.TestCase):
         play.fog_min_pixels_in_radius = 20
         play._fog_mask_cache_frame_id = None
         play._fog_mask_cache_value = None
+        play.get_player_pos = lambda player: ((player[0] + player[2]) / 2, (player[1] + player[3]) / 2)
         return play
 
     @staticmethod
@@ -49,6 +50,15 @@ class PoisonGasAvoidanceTests(unittest.TestCase):
         frame = np.zeros((300, 300, 3), dtype=np.uint8)
 
         self.assertIsNone(play.detect_fog_direction_escape(frame, (150, 150)))
+
+    def test_playstyle_poison_gas_api_detects_direction(self):
+        play = self.make_play()
+        frame = np.zeros((300, 300, 3), dtype=np.uint8)
+        frame[75:105, 135:165] = self.fog_rgb()
+        play.current_frame = frame
+
+        self.assertTrue(play.is_there_poison_gas("up", [135, 135, 165, 165]))
+        self.assertFalse(play.is_there_poison_gas("down", [135, 135, 165, 165]))
 
 
 if __name__ == "__main__":

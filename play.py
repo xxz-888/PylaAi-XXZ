@@ -108,6 +108,14 @@ class Movement:
         self._enemy_velocity_confidence = {}
         self.enemy_velocity_confidence = 0.0
         self._strafe_current_interval = 0.0
+        self.roam_direction_hold_time = float(bot_config.get("roam_direction_hold_time", 1.5))
+        self.roam_center_bias = float(bot_config.get("roam_center_bias", 0.25))
+        self._roam_angle = random.uniform(0, 360)
+        self._roam_last_changed = 0.0
+        self.retreat_strafe_fraction = float(bot_config.get("retreat_strafe_fraction", 0.5))
+        self.approach_flank_blend = float(bot_config.get("approach_flank_blend", 0.12))
+        self.multi_enemy_flee_weight = float(bot_config.get("multi_enemy_flee_weight", 0.45))
+        self.angle_smooth_factor = float(bot_config.get("angle_smooth_factor", 0.28))
         
     @staticmethod
     def get_enemy_pos(enemy):
@@ -190,15 +198,17 @@ class Movement:
     def should_use_super_on_enemy(brawler, super_type, enemy_distance, attack_range, super_range, enemy_hittable):
         utility_super = super_type in {"spawnable", "other", "other_target"}
         charge_super = super_type == "charge"
-        if enemy_hittable and enemy_distance <= super_range:
+        near_range = max(super_range, attack_range * 0.75)
+        near_range = min(near_range, attack_range)
+        if enemy_hittable and enemy_distance <= min(super_range, near_range):
             return True
-        if enemy_hittable and super_type == "damage" and enemy_distance <= max(super_range, attack_range):
+        if enemy_hittable and super_type == "damage" and enemy_distance <= near_range:
             return True
-        if utility_super and enemy_distance <= max(super_range, attack_range):
+        if enemy_hittable and utility_super and enemy_distance <= near_range:
             return True
         if (
                 charge_super
-                and enemy_distance <= max(super_range + attack_range, attack_range * 1.25)
+                and enemy_distance <= near_range
                 and (enemy_hittable or brawler in {"stu", "surge"})
         ):
             return True
@@ -598,6 +608,7 @@ class Play(Movement):
             "brawlers_info": self.brawlers_info,
             "player_data": player_data,
             "enemy_data": enemy_data,
+            "teammate_data": getattr(self, "last_playstyle_teammate_data", None),
             "walls": walls,
             "game_mode": self.game_mode,
             "persistent_data": persistent_data,
@@ -614,9 +625,12 @@ class Play(Movement):
             "must_brawler_hold_attack": self.must_brawler_hold_attack,
             "get_brawler_range": self.get_brawler_range,
             "get_player_pos": self.get_player_pos,
+            "get_entity_pos": self.get_entity_pos,
             "is_there_enemy": self.is_there_enemy,
+            "is_there_poison_gas": self.is_there_poison_gas,
             "no_enemy_movement": self.no_enemy_movement,
             "find_closest_enemy": self.find_closest_enemy,
+            "find_closest_teammate": self.find_closest_teammate,
             "get_horizontal_move_key": self.get_horizontal_move_key,
             "get_vertical_move_key": self.get_vertical_move_key,
             "is_path_blocked": self.is_path_blocked,
@@ -747,6 +761,20 @@ class Play(Movement):
             print("no movement possible ?")
             # If no movement is possible, return empty string
             return preferred_movement
+
+    def get_entity_pos(self, entity):
+        return self.get_enemy_pos(entity)
+
+    def find_closest_teammate(self, teammate_data, player_coords, walls=None):
+        closest_distance = float('inf')
+        closest_teammate = None
+        for teammate in teammate_data or []:
+            teammate_pos = self.get_enemy_pos(teammate)
+            distance = self.get_distance(teammate_pos, player_coords)
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_teammate = teammate_pos
+        return closest_teammate, closest_distance
 
     def _build_trusted_fog_mask(self, frame, roi_center, roi_radius):
         """Return (mask, (ox, oy)) or None.
@@ -898,14 +926,74 @@ class Play(Movement):
         vlog(f"directional fog escape: counts={direction_counts} -> angle={angle:.1f} deg")
         return angle
 
+    def is_there_poison_gas(self, direction, player_data):
+        if self.current_frame is None or player_data is None:
+            return False
+        player_pos = self.get_player_pos(player_data)
+        r = int(max(80, min(self.fog_flee_distance, 150)))
+        built = self._build_trusted_fog_mask(self.current_frame, roi_center=player_pos, roi_radius=r)
+        if built is None:
+            return False
+        mask, (ox, oy) = built
+        import numpy as np
+        ys, xs = np.nonzero(mask)
+        if xs.size == 0:
+            return False
+
+        px, py = player_pos
+        dx = (xs + ox) - px
+        dy = (ys + oy) - py
+        band = max(30, int(r * 0.45))
+        min_pixels = max(12, int(self.fog_min_pixels_in_radius * 0.45))
+        direction = str(direction).lower()
+        checks = {
+            "up": (dy < 0) & (dy >= -r) & (np.abs(dx) <= band),
+            "down": (dy > 0) & (dy <= r) & (np.abs(dx) <= band),
+            "left": (dx < 0) & (dx >= -r) & (np.abs(dy) <= band),
+            "right": (dx > 0) & (dx <= r) & (np.abs(dy) <= band),
+        }
+        if direction not in checks:
+            return False
+        return int(checks[direction].sum()) >= min_pixels
+
     def showdown_roam(self, player_data, walls):
-        """Idle roam movement for showdown: rotate the joystick angle each
-        call to look around. Close-fog avoidance is handled by the uniform
-        fog-threat override in get_showdown_movement.
+        """Idle roam movement that travels instead of spinning in place.
+
+        Close-fog avoidance is still handled by the uniform fog override in
+        get_showdown_movement, but this keeps ordinary no-enemy movement away
+        from walls and lightly biased toward screen center.
         """
-        self._roam_spin_angle = (getattr(self, "_roam_spin_angle", 0.0) + 15.0) % 360
-        vlog(f"roam: idle spin → angle={self._roam_spin_angle:.1f}°")
-        return self._roam_spin_angle
+        now = time.time()
+        player_pos = self.get_player_pos(player_data)
+        current_blocked = self.is_path_blocked_angle(player_pos, self._roam_angle, walls)
+        time_expired = (now - self._roam_last_changed) > self.roam_direction_hold_time
+
+        if current_blocked or time_expired:
+            new_angle = None
+            for _ in range(16):
+                candidate = random.uniform(0, 360)
+                if not self.is_path_blocked_angle(player_pos, candidate, walls):
+                    new_angle = candidate
+                    break
+            if new_angle is None:
+                new_angle = self.find_best_angle(player_pos, (self._roam_angle + 180) % 360, walls)
+
+            if self.roam_center_bias > 0:
+                screen_cx, screen_cy = 960.0, 540.0
+                dx = screen_cx - player_pos[0]
+                dy = screen_cy - player_pos[1]
+                if math.hypot(dx, dy) > 160:
+                    toward_center = self.angle_from_direction(dx, dy)
+                    blended = self.blend_angles(new_angle, toward_center, self.roam_center_bias)
+                    if not self.is_path_blocked_angle(player_pos, blended, walls):
+                        new_angle = blended
+
+            self._roam_angle = new_angle % 360
+            self._roam_last_changed = now
+            vlog(f"roam: new direction -> {self._roam_angle:.1f}°")
+
+        vlog(f"roam: holding -> angle={self._roam_angle:.1f}°")
+        return self._roam_angle
 
     @staticmethod
     def angle_to_vector(angle_degrees):
@@ -1147,9 +1235,22 @@ class Play(Movement):
                 if enemy_distance > safe_range:
                     desired = toward_angle
                     vlog(f"enemy detected → approach desired={desired:.1f}° (dist={int(enemy_distance)}px, safe={safe_range}px)")
+                    if self.approach_flank_blend > 0 and enemy_distance > safe_range * 1.2:
+                        flank_angle = (toward_angle + 90 * self._strafe_side) % 360
+                        desired = self.blend_angles(desired, flank_angle, self.approach_flank_blend)
+                        vlog(f"approach flank blend -> desired={desired:.1f}°")
                 else:
                     desired = self.angle_opposite(toward_angle)
                     vlog(f"enemy too close → retreat desired={desired:.1f}° (dist={int(enemy_distance)}px, safe={safe_range}px)")
+                    if self.multi_enemy_flee_weight > 0 and enemy_data and len(enemy_data) > 1:
+                        mass_x = sum(self.get_enemy_pos(enemy)[0] for enemy in enemy_data) / len(enemy_data)
+                        mass_y = sum(self.get_enemy_pos(enemy)[1] for enemy in enemy_data) / len(enemy_data)
+                        mass_dx = mass_x - player_pos[0]
+                        mass_dy = mass_y - player_pos[1]
+                        if math.hypot(mass_dx, mass_dy) > 10:
+                            mass_flee = self.angle_opposite(self.angle_from_direction(mass_dx, mass_dy))
+                            desired = self.blend_angles(desired, mass_flee, self.multi_enemy_flee_weight)
+                            vlog(f"multi-enemy flee blend -> desired={desired:.1f}°")
 
                 if (
                         self.strafe_enabled
@@ -1159,6 +1260,19 @@ class Play(Movement):
                     strafe_angle = self.get_strafe_angle(toward_angle, now_t, enemy_distance, safe_range)
                     desired = self.blend_angles(desired, strafe_angle, self.strafe_blend)
                     vlog(f"strafe blend → desired={desired:.1f}°")
+                elif (
+                        self.strafe_enabled
+                        and fog_flee_angle is None
+                        and enemy_distance <= safe_range
+                        and self.retreat_strafe_fraction > 0
+                ):
+                    strafe_angle = self.get_strafe_angle(toward_angle, now_t, enemy_distance, safe_range)
+                    desired = self.blend_angles(
+                        desired,
+                        strafe_angle,
+                        self.strafe_blend * self.retreat_strafe_fraction,
+                    )
+                    vlog(f"retreat strafe blend -> desired={desired:.1f}°")
 
                 if (self.trio_grouping_enabled and teammate_data and enemy_distance > attack_range):
                     closest_teammate, teammate_distance = self.get_closest_teammate(player_data, teammate_data)
@@ -1440,7 +1554,7 @@ class Play(Movement):
         return int(safe_range * multiplier), attack_range, super_range
 
     def _debounce_angle(self, angle: float, threshold_deg: float = 10.0) -> float:
-        """Suppress small angle changes to avoid jitter.
+        """Suppress small angle changes and smooth accepted turns.
 
         Only adopts the new angle if it differs by more than threshold_deg
         from the last committed angle, OR if no angle was committed yet.
@@ -1452,7 +1566,10 @@ class Play(Movement):
 
         diff = abs((angle - self.last_movement + 180) % 360 - 180)
         if diff > threshold_deg:
-            self.last_movement = angle
+            if self.angle_smooth_factor > 0:
+                self.last_movement = self.blend_angles(angle, self.last_movement, self.angle_smooth_factor)
+            else:
+                self.last_movement = angle
             self.last_movement_time = time.time()
 
         return self.last_movement
@@ -1556,16 +1673,23 @@ class Play(Movement):
             self.is_super_ready = self.remember_ability_ready("super", detected, current_time)
             self.time_since_super_checked = current_time
 
+    @staticmethod
+    def _scaled_pixel_threshold(base_threshold, screenshot, crop_area):
+        reference_area = max(1, abs(crop_area[2] - crop_area[0]) * abs(crop_area[3] - crop_area[1]))
+        actual_area = max(1, screenshot.shape[0] * screenshot.shape[1])
+        return max(1.0, float(base_threshold) * (actual_area / reference_area))
+
     def check_if_hypercharge_ready(self, frame):
         wr, hr = self.window_controller.width_ratio, self.window_controller.height_ratio
         x1, y1 = int(self.hypercharge_crop_area[0] * wr), int(self.hypercharge_crop_area[1] * hr)
         x2, y2 = int(self.hypercharge_crop_area[2] * wr), int(self.hypercharge_crop_area[3] * hr)
         screenshot = frame[y1:y2, x1:x2]
         purple_pixels = count_hsv_pixels(screenshot, (137, 158, 159), (179, 255, 255))
+        threshold = self._scaled_pixel_threshold(self.hypercharge_pixels_minimum, screenshot, self.hypercharge_crop_area)
         if debug:
-            print("hypercharge purple pixels:", purple_pixels, "(if > ", self.hypercharge_pixels_minimum, " then hypercharge is ready)")
+            print("hypercharge purple pixels:", purple_pixels, "(if > ", threshold, " then hypercharge is ready)")
             cv2.imwrite(f"debug_frames/hypercharge_debug_{int(time.time())}.png", cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR))
-        if purple_pixels > self.hypercharge_pixels_minimum:
+        if purple_pixels > threshold:
             return True
         return False
 
@@ -1575,18 +1699,17 @@ class Play(Movement):
         x2, y2 = int(self.gadget_crop_area[2] * wr), int(self.gadget_crop_area[3] * hr)
         screenshot = frame[y1:y2, x1:x2]
         green_pixels = count_hsv_pixels(screenshot, (57, 219, 165), (62, 255, 255))
-        broad_green_pixels = count_hsv_pixels(screenshot, (45, 120, 100), (75, 255, 255))
+        threshold = self._scaled_pixel_threshold(self.gadget_pixels_minimum, screenshot, self.gadget_crop_area)
         if debug:
             print(
                 "gadget green pixels:",
-                f"strict={green_pixels}",
-                f"broad={broad_green_pixels}",
-                "(if above threshold, gadget is ready)"
+                green_pixels,
+                "(if > ",
+                threshold,
+                " then gadget is ready)"
             )
             cv2.imwrite(f"debug_frames/gadget_debug_{int(time.time())}.png", cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR))
-        if green_pixels > self.gadget_pixels_minimum:
-            return True
-        if broad_green_pixels > self.gadget_pixels_minimum:
+        if green_pixels > threshold:
             return True
         return False
 
@@ -1608,6 +1731,7 @@ class Play(Movement):
         wide_screenshot = frame[wy1:wy2, wx1:wx2]
         wide_yellow_pixels = count_hsv_pixels(wide_screenshot, (17, 170, 200), (27, 255, 255))
         wide_orange_pixels = count_hsv_pixels(wide_screenshot, (8, 120, 150), (38, 255, 255))
+        threshold = self._scaled_pixel_threshold(self.super_pixels_minimum, screenshot, self.super_crop_area)
         if debug:
             print(
                 "super pixels:",
@@ -1615,17 +1739,18 @@ class Play(Movement):
                 f"orange={orange_pixels}",
                 f"wide_yellow={wide_yellow_pixels}",
                 f"wide_orange={wide_orange_pixels}",
+                f"threshold={threshold}",
                 "(if above threshold, super is ready)",
             )
             cv2.imwrite(f"debug_frames/super_debug_{int(time.time())}.png", cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR))
 
-        if yellow_pixels > self.super_pixels_minimum:
+        if yellow_pixels > threshold:
             return True
-        if orange_pixels > self.super_pixels_minimum * 1.25:
+        if orange_pixels > threshold * 1.25:
             return True
-        if wide_yellow_pixels > self.super_pixels_minimum * 1.5:
+        if wide_yellow_pixels > threshold * 1.5:
             return True
-        if wide_orange_pixels > self.super_pixels_minimum * 1.5:
+        if wide_orange_pixels > threshold * 1.5:
             return True
         return False
 
@@ -1859,6 +1984,7 @@ class Play(Movement):
         self.refresh_ready_abilities(frame, current_time)
 
         self.current_frame = frame
+        self.last_playstyle_teammate_data = data.get("teammate")
         movement = self.loop(brawler, data, current_time)
 
         if visual_debug:

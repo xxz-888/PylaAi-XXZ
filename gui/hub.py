@@ -95,7 +95,6 @@ class Hub:
         self.general_config.setdefault("long_press_star_drop", "no")
         self.general_config.setdefault("trophies_multiplier", 1.0)
         self.general_config.setdefault("ocr_scale_down_factor", 0.5)
-        self.general_config.setdefault("player_tag", "")
         self.general_config.setdefault("current_emulator", "LDPlayer")
         self.general_config.setdefault("emulator_port", 5555)
         self.general_config.setdefault("terminal_logging", "no")
@@ -645,7 +644,7 @@ class Hub:
     def _add_version_label(self, frame):
         version_label = ctk.CTkLabel(
             frame,
-            text="SD-OP v1.1.5",
+            text="XXZ v1.2",
             font=("Arial", S(14), "bold"),
             text_color="#888888"
         )
@@ -937,14 +936,6 @@ class Hub:
             convert_func=int,
             use_general_config=True,
             tooltip_text="Enter the multiplier for trophies gained per match (for example : 2 for brawl arena)."
-        )
-
-        create_labeled_entry(
-            label_text="Player Tag:",
-            config_key="player_tag",
-            convert_func=lambda s: s.strip().lstrip("#"),
-            use_general_config=True,
-            tooltip_text="Player tag used to auto-fill unlocked brawlers and current trophies."
         )
 
         create_labeled_entry(

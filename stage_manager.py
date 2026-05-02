@@ -219,11 +219,55 @@ class StageManager:
         for row in self.brawlers_pick_data:
             key = normalize_brawler_name(row.get("brawler", ""))
             refreshed_row = dict(row)
-            if key in trophies_by_brawler and refreshed_row.get("trophies") != trophies_by_brawler[key]:
-                refreshed_row["trophies"] = trophies_by_brawler[key]
-                changed = True
+            if key in trophies_by_brawler:
+                api_trophies = trophies_by_brawler[key]
+                if refreshed_row.get("brawler") == old_front_brawler:
+                    local_trophies = self._number_or_default(
+                        getattr(self.Trophy_observer, "current_trophies", refreshed_row.get("trophies", 0)),
+                        refreshed_row.get("trophies", 0),
+                    )
+                    api_trophies = max(api_trophies, local_trophies)
+                if refreshed_row.get("trophies") != api_trophies:
+                    refreshed_row["trophies"] = api_trophies
+                    changed = True
             if self._number_or_default(refreshed_row.get("trophies", 0), 0) < target:
                 refreshed_rows.append(refreshed_row)
+
+        current_row = next(
+            (row for row in refreshed_rows if row.get("brawler") == old_front_brawler),
+            None,
+        )
+        remaining_rows = [
+            row for row in refreshed_rows
+            if row.get("brawler") != old_front_brawler
+        ]
+
+        if current_row is not None:
+            remaining_rows.sort(
+                key=lambda row: (
+                    self._number_or_default(row.get("trophies", 0), 0),
+                    str(row.get("brawler", "")),
+                )
+            )
+            refreshed_rows = [current_row] + remaining_rows
+            self.push_all_needs_selection = False
+        else:
+            refreshed_rows = remaining_rows
+            self.push_all_needs_selection = bool(refreshed_rows)
+
+        if refreshed_rows:
+            refreshed_rows[0]["automatically_pick"] = False
+            refreshed_rows[0]["selection_method"] = "lowest_trophies"
+            for row in refreshed_rows[1:]:
+                if row.get("automatically_pick") is not True:
+                    changed = True
+                row["automatically_pick"] = True
+                row["selection_method"] = "lowest_trophies"
+
+        old_order = [row.get("brawler") for row in self.brawlers_pick_data]
+        new_order = [row.get("brawler") for row in refreshed_rows]
+        if new_order != old_order:
+            changed = True
 
         if not refreshed_rows:
             self.brawlers_pick_data = []
@@ -234,26 +278,7 @@ class StageManager:
         if len(refreshed_rows) != len(self.brawlers_pick_data):
             changed = True
 
-        refreshed_rows.sort(
-            key=lambda row: (
-                self._number_or_default(row.get("trophies", 0), 0),
-                str(row.get("brawler", "")),
-            )
-        )
-        for index, row in enumerate(refreshed_rows):
-            should_auto_pick = index != 0
-            if row.get("automatically_pick") != should_auto_pick:
-                changed = True
-            row["automatically_pick"] = should_auto_pick
-            row["selection_method"] = "lowest_trophies"
-
-        old_order = [row.get("brawler") for row in self.brawlers_pick_data]
-        new_order = [row.get("brawler") for row in refreshed_rows]
-        if new_order != old_order:
-            changed = True
-
         self.brawlers_pick_data = refreshed_rows
-        self.push_all_needs_selection = self.brawlers_pick_data[0].get("brawler") != old_front_brawler
 
         current_trophies = self._number_or_default(self.brawlers_pick_data[0].get("trophies", 0), 0)
         if getattr(self.Trophy_observer, "current_trophies", None) != current_trophies:
@@ -261,7 +286,10 @@ class StageManager:
             changed = True
 
         if changed:
-            print("Push All API trophies refreshed and queue sorted before target check.")
+            if self.push_all_needs_selection:
+                print("Push All API trophies refreshed; current brawler reached target, selecting next lowest.")
+            else:
+                print("Push All API trophies refreshed; keeping current brawler until target.")
             save_brawler_data(self.brawlers_pick_data)
         return changed
 

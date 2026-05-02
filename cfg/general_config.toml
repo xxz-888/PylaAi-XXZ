@@ -22,7 +22,6 @@ visual_debug_scale = 0.6
 visual_debug_max_fps = 30
 visual_debug_max_boxes = 120
 ocr_scale_down_factor = 0.5
-player_tag = ""
 trophies_multiplier = 1
 run_for_minutes = 0
 current_emulator = "MuMu"

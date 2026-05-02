@@ -193,7 +193,7 @@ class PushAllTargetSwitchTest(unittest.TestCase):
     @patch("stage_manager.load_brawl_stars_api_config")
     @patch("stage_manager.time.sleep", return_value=None)
     @patch("stage_manager.get_state", return_value="lobby")
-    def test_push_all_resorts_from_api_and_selects_new_lowest_each_lobby(
+    def test_push_all_keeps_current_brawler_after_api_refresh_until_target(
             self,
             _mock_get_state,
             _mock_sleep,
@@ -239,9 +239,66 @@ class PushAllTargetSwitchTest(unittest.TestCase):
 
         manager.start_game()
 
-        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "gale")
-        self.assertEqual(manager.Trophy_observer.current_trophies, 120)
-        self.assertEqual(manager.Lobby_automation.lowest_calls, 1)
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "tara")
+        self.assertEqual(manager.brawlers_pick_data[0]["trophies"], 560)
+        self.assertEqual(manager.Trophy_observer.current_trophies, 560)
+        self.assertEqual(manager.Lobby_automation.lowest_calls, 0)
+
+    @patch("stage_manager.save_brawler_data")
+    @patch("stage_manager.fetch_brawl_stars_player")
+    @patch("stage_manager.load_brawl_stars_api_config")
+    @patch("stage_manager.time.sleep", return_value=None)
+    @patch("stage_manager.get_state", return_value="lobby")
+    def test_push_all_api_refresh_does_not_roll_current_trophies_backwards(
+            self,
+            _mock_get_state,
+            _mock_sleep,
+            mock_api_config,
+            mock_fetch_player,
+            _mock_save,
+    ):
+        manager = self.make_manager(1000)
+        manager.brawlers_pick_data = [
+            {
+                "brawler": "lumi",
+                "push_until": 1000,
+                "trophies": 48,
+                "wins": 0,
+                "type": "trophies",
+                "automatically_pick": False,
+                "win_streak": 0,
+                "selection_method": "lowest_trophies",
+            },
+            {
+                "brawler": "tara",
+                "push_until": 1000,
+                "trophies": 37,
+                "wins": 0,
+                "type": "trophies",
+                "automatically_pick": True,
+                "win_streak": 0,
+                "selection_method": "lowest_trophies",
+            },
+        ]
+        manager.Trophy_observer = DummyTrophyObserver(48)
+        mock_api_config.return_value = {
+            "api_token": "token",
+            "player_tag": "#TAG",
+            "timeout_seconds": 15,
+        }
+        mock_fetch_player.return_value = {
+            "brawlers": [
+                {"name": "LUMI", "trophies": 37},
+                {"name": "TARA", "trophies": 37},
+            ]
+        }
+
+        manager.start_game()
+
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "lumi")
+        self.assertEqual(manager.brawlers_pick_data[0]["trophies"], 48)
+        self.assertEqual(manager.Trophy_observer.current_trophies, 48)
+        self.assertEqual(manager.Lobby_automation.lowest_calls, 0)
 
 
 if __name__ == "__main__":

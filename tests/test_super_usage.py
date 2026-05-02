@@ -17,13 +17,30 @@ class FakeWindow:
         self.keys.append((key, kwargs))
 
 
+class HalfScaleWindow(FakeWindow):
+    width_ratio = 0.5
+    height_ratio = 0.5
+
+
 class SuperUsageTests(unittest.TestCase):
     def test_near_enemy_uses_super_even_when_configured_super_range_is_short(self):
         self.assertTrue(
             Movement.should_use_super_on_enemy(
                 "meg",
                 "damage",
-                enemy_distance=450,
+                enemy_distance=420,
+                attack_range=576,
+                super_range=277,
+                enemy_hittable=True,
+            )
+        )
+
+    def test_damage_super_waits_when_enemy_is_outside_near_range(self):
+        self.assertFalse(
+            Movement.should_use_super_on_enemy(
+                "meg",
+                "damage",
+                enemy_distance=500,
                 attack_range=576,
                 super_range=277,
                 enemy_hittable=True,
@@ -69,14 +86,16 @@ class SuperUsageTests(unittest.TestCase):
         self.assertEqual(play.window_controller.keys[0][1], {"touch_up": True, "touch_down": False})
         self.assertEqual(play.window_controller.keys[1][0], "E")
 
-    def test_ability_ready_memory_survives_one_missed_hud_scan(self):
+    def test_super_ready_memory_survives_one_missed_hud_scan(self):
         play = Play.__new__(Play)
         play.ability_ready_memory_seconds = 1.25
         play._super_ready_seen_at = 10.0
         play._gadget_ready_seen_at = 10.0
+        play._hypercharge_ready_seen_at = 10.0
 
         self.assertTrue(play.remember_ability_ready("super", detected_ready=False, current_time=10.5))
         self.assertFalse(play.remember_ability_ready("gadget", detected_ready=False, current_time=10.5))
+        self.assertFalse(play.remember_ability_ready("hypercharge", detected_ready=False, current_time=10.5))
         self.assertFalse(play.remember_ability_ready("super", detected_ready=False, current_time=12.0))
 
     def test_super_and_gadget_taps_are_long_enough_for_emulators(self):
@@ -128,16 +147,49 @@ class SuperUsageTests(unittest.TestCase):
 
         self.assertTrue(play.check_if_super_ready(frame))
 
-    def test_gadget_ready_detection_accepts_emulator_color_drift(self):
+    def test_super_ready_detection_scales_threshold_for_scrcpy_width(self):
+        play = Play.__new__(Play)
+        play.window_controller = HalfScaleWindow()
+        play.super_crop_area = [1460, 830, 1560, 930]
+        play.super_pixels_minimum = 1800
+
+        frame = np.zeros((540, 960, 3), dtype=np.uint8)
+        frame[430:460, 740:770] = (255, 170, 0)
+
+        self.assertTrue(play.check_if_super_ready(frame))
+
+    def test_hypercharge_ready_detection_scales_threshold_for_scrcpy_width(self):
+        play = Play.__new__(Play)
+        play.window_controller = HalfScaleWindow()
+        play.hypercharge_crop_area = [1350, 940, 1450, 1050]
+        play.hypercharge_pixels_minimum = 1800
+
+        frame = np.zeros((540, 960, 3), dtype=np.uint8)
+        frame[475:505, 685:715] = (190, 0, 255)
+
+        self.assertTrue(play.check_if_hypercharge_ready(frame))
+
+    def test_gadget_ready_detection_matches_op_main_strict_green(self):
         play = Play.__new__(Play)
         play.window_controller = FakeWindow()
         play.gadget_crop_area = [1580, 930, 1700, 1050]
-        play.gadget_pixels_minimum = 1300
+        play.gadget_pixels_minimum = 1100
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        frame[950:1025, 1600:1675] = (0, 255, 0)
+
+        self.assertTrue(play.check_if_gadget_ready(frame))
+
+    def test_gadget_ready_detection_rejects_broad_green_false_positive(self):
+        play = Play.__new__(Play)
+        play.window_controller = FakeWindow()
+        play.gadget_crop_area = [1580, 930, 1700, 1050]
+        play.gadget_pixels_minimum = 1100
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         frame[950:1025, 1600:1675] = (65, 210, 70)
 
-        self.assertTrue(play.check_if_gadget_ready(frame))
+        self.assertFalse(play.check_if_gadget_ready(frame))
 
     def test_visible_enemy_cannot_use_abilities_before_player_validation(self):
         play = Play.__new__(Play)
