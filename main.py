@@ -59,6 +59,12 @@ def parse_max_ips(value):
     return max_ips
 
 
+def normalize_detected_state(detected_state, previous_state=None, lobby_seen_since_match=False):
+    if detected_state == "prestige_reward" and not lobby_seen_since_match:
+        return "match"
+    return detected_state
+
+
 def pyla_main(data):
 
     class Main:
@@ -78,6 +84,8 @@ def pyla_main(data):
             self.no_detections_action_threshold = 60 * 8
             self.initialize_stage_manager()
             self.state = None
+            self.lobby_seen_since_match = False
+            self.last_ignored_prestige_state_time = 0.0
             general_config = load_toml_as_dict("cfg/general_config.toml")
             self.max_ips = parse_max_ips(general_config.get('max_ips', 0))
             print(
@@ -423,13 +431,32 @@ def pyla_main(data):
             self.restart_brawl_stars()
             return True
 
+        def apply_state_context_guard(self, detected_state, previous_state):
+            state = normalize_detected_state(
+                detected_state,
+                previous_state=previous_state,
+                lobby_seen_since_match=self.lobby_seen_since_match,
+            )
+            if detected_state == "prestige_reward" and state != detected_state:
+                now = time.time()
+                if now - self.last_ignored_prestige_state_time >= 5.0:
+                    print("Ignoring prestige reward detection until lobby is confirmed after match.")
+                    self.last_ignored_prestige_state_time = now
+
+            if state == "match":
+                self.lobby_seen_since_match = False
+            elif state == "lobby":
+                self.lobby_seen_since_match = True
+            return state
+
         def manage_time_tasks(self, frame):
             if self.handle_disconnect_screen(frame):
                 return
 
             if self.Time_management.state_check():
-                state = get_state(frame)
+                detected_state = get_state(frame)
                 previous_state = self.state
+                state = self.apply_state_context_guard(detected_state, previous_state)
                 self.state = state
                 if state != "match":
                     self.Play.time_since_last_proceeding = time.time()
