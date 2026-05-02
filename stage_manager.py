@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from state_finder import get_state, find_game_result, get_star_drop_type, is_in_prestige_reward, get_prestige_next_button_center
+from state_finder import get_state, find_game_result, is_in_prestige_reward, get_prestige_next_button_center
 from trophy_observer import TrophyObserver
 from utils import find_template_center, load_toml_as_dict, async_notify_user, \
     save_brawler_data, extract_text_strings, load_brawl_stars_api_config, fetch_brawl_stars_player, normalize_brawler_name
@@ -55,7 +55,6 @@ class StageManager:
         self.last_recorded_result_time = 0.0
         self.last_recorded_result = None
         self.active_end_result = None
-        self.long_press_star_drop = load_toml_as_dict("./cfg/general_config.toml")["long_press_star_drop"]
         time_thresholds = load_toml_as_dict("./cfg/time_tresholds.toml")
         self.end_screen_dismiss_delay = float(time_thresholds.get("end_screen_dismiss_delay", 0.35))
         self.window_controller = window_controller
@@ -73,7 +72,7 @@ class StageManager:
             'end_3rd': self.end_game,
             'end_4th': self.end_game,
             'lobby': self.start_game,
-            'star_drop': self.click_star_drop,
+            'star_drop': lambda: 0,
             'prestige_reward': self.handle_prestige_reward,
             'trophy_reward': lambda: self.window_controller.press_key("Q")
         }
@@ -373,23 +372,6 @@ class StageManager:
         self.window_controller.keys_up(list("wasd"))
         self.window_controller.press_key("Q")
         print("Pressed Q to start a match")
-    def click_star_drop(self):
-        screenshot = self.window_controller.screenshot()
-        star_drop_type = get_star_drop_type(cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR))
-        if star_drop_type in ("angelic", "demonic"):
-            print(f"{star_drop_type.capitalize()} star drop detected; forcing long press.")
-            self.window_controller.press_key("Q", 10)
-            return
-
-        if star_drop_type == "standard":
-            print("Standard star drop detected; fast tapping.")
-            for _ in range(5):
-                self.window_controller.press_key("Q")
-                time.sleep(0.08)
-            return
-
-        return
-
     def advance_to_next_brawler_after_prestige(self):
         if not self.brawlers_pick_data:
             return False
