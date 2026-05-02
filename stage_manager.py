@@ -10,7 +10,7 @@ import numpy as np
 from state_finder import get_state, find_game_result, get_star_drop_type, is_in_prestige_reward, get_prestige_next_button_center
 from trophy_observer import TrophyObserver
 from utils import find_template_center, load_toml_as_dict, async_notify_user, \
-    save_brawler_data, extract_text_strings
+    save_brawler_data, extract_text_strings, load_brawl_stars_api_config, fetch_brawl_stars_player, normalize_brawler_name
 from adaptive_brain import AdaptiveBrain
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
@@ -190,8 +190,91 @@ class StageManager:
         save_brawler_data(self.brawlers_pick_data)
         return True
 
+    def refresh_push_all_trophies_from_api(self):
+        if not self.brawlers_pick_data:
+            return False
+        if self.brawlers_pick_data[0].get("type", "trophies") != "trophies":
+            return False
+        if not any(row.get("selection_method") == "lowest_trophies" for row in self.brawlers_pick_data):
+            return False
+
+        old_front_brawler = self.brawlers_pick_data[0].get("brawler")
+        try:
+            api_config = load_brawl_stars_api_config("cfg/brawl_stars_api.toml")
+            player_data = fetch_brawl_stars_player(
+                api_config.get("api_token", "").strip(),
+                api_config.get("player_tag", "").strip(),
+                int(api_config.get("timeout_seconds", 15)),
+            )
+        except Exception as e:
+            print(f"Push All API trophy refresh failed; using local trophies. {e}")
+            return False
+
+        trophies_by_brawler = {
+            normalize_brawler_name(brawler.get("name", "")): int(brawler.get("trophies", 0))
+            for brawler in player_data.get("brawlers", [])
+        }
+        target = self._number_or_default(self.brawlers_pick_data[0].get("push_until", 1000), 1000)
+        changed = False
+        refreshed_rows = []
+        for row in self.brawlers_pick_data:
+            key = normalize_brawler_name(row.get("brawler", ""))
+            refreshed_row = dict(row)
+            if key in trophies_by_brawler and refreshed_row.get("trophies") != trophies_by_brawler[key]:
+                refreshed_row["trophies"] = trophies_by_brawler[key]
+                changed = True
+            if self._number_or_default(refreshed_row.get("trophies", 0), 0) < target:
+                refreshed_rows.append(refreshed_row)
+
+        if not refreshed_rows:
+            self.brawlers_pick_data = []
+            save_brawler_data(self.brawlers_pick_data)
+            print("Push All API trophies refreshed: all brawlers reached target.")
+            return True
+
+        if len(refreshed_rows) != len(self.brawlers_pick_data):
+            changed = True
+
+        refreshed_rows.sort(
+            key=lambda row: (
+                self._number_or_default(row.get("trophies", 0), 0),
+                str(row.get("brawler", "")),
+            )
+        )
+        for index, row in enumerate(refreshed_rows):
+            should_auto_pick = index != 0
+            if row.get("automatically_pick") != should_auto_pick:
+                changed = True
+            row["automatically_pick"] = should_auto_pick
+            row["selection_method"] = "lowest_trophies"
+
+        old_order = [row.get("brawler") for row in self.brawlers_pick_data]
+        new_order = [row.get("brawler") for row in refreshed_rows]
+        if new_order != old_order:
+            changed = True
+
+        self.brawlers_pick_data = refreshed_rows
+        self.push_all_needs_selection = self.brawlers_pick_data[0].get("brawler") != old_front_brawler
+
+        current_trophies = self._number_or_default(self.brawlers_pick_data[0].get("trophies", 0), 0)
+        if getattr(self.Trophy_observer, "current_trophies", None) != current_trophies:
+            self.Trophy_observer.change_trophies(current_trophies)
+            changed = True
+
+        if changed:
+            print("Push All API trophies refreshed and queue sorted before target check.")
+            save_brawler_data(self.brawlers_pick_data)
+        return changed
+
     def start_game(self):
         print("state is lobby, starting game")
+        self.push_all_needs_selection = False
+        self.refresh_push_all_trophies_from_api()
+        if not self.brawlers_pick_data:
+            print("Bot stopping: all Push All targets completed.")
+            self.window_controller.keys_up(list("wasd"))
+            self.window_controller.close()
+            sys.exit(0)
         values = {
             "trophies": self.Trophy_observer.current_trophies,
             "wins": self.Trophy_observer.current_wins
@@ -277,6 +360,14 @@ class StageManager:
                         return
             else:
                 print("Next brawler is in manual mode, waiting 10 seconds to let user switch.")
+
+        elif self.push_all_needs_selection:
+            print("Push All queue changed from API; selecting the new lowest trophy brawler.")
+            selected = self.Lobby_automation.select_lowest_trophy_brawler()
+            if not selected:
+                print("Could not confirm the API-refreshed brawler selection reached lobby; delaying match start.")
+                self.window_controller.keys_up(list("wasd"))
+                return
 
         # q btn is over the start btn
         self.window_controller.keys_up(list("wasd"))
