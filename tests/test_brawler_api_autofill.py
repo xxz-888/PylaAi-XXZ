@@ -1,4 +1,6 @@
 import unittest
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 from gui.select_brawler import SelectBrawler
@@ -7,6 +9,14 @@ from utils import get_config_player_tag
 
 
 class BrawlerApiAutofillTest(unittest.TestCase):
+    def test_latest_brawlers_exist_in_local_registry_and_icons(self):
+        expected_brawlers = {"damian", "starrnova", "bolt", "buzzlightyear"}
+        brawlers_info = json.loads(Path("cfg/brawlers_info.json").read_text())
+
+        self.assertTrue(expected_brawlers.issubset(brawlers_info))
+        for brawler in expected_brawlers:
+            self.assertTrue(Path(f"api/assets/brawler_icons/{brawler}.png").is_file())
+
     def test_trophy_lookup_uses_normalized_brawler_name(self):
         selector = object.__new__(SelectBrawler)
         selector.api_trophies_by_brawler = {"8-bit": 731, "sprout": 642}

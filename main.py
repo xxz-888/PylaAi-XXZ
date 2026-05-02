@@ -474,23 +474,29 @@ def pyla_main(data):
                 print(f"Could not OCR disconnect screen: {e}")
                 return False
 
+            lowered_text = text.lower()
             if (
-                    "reload" not in text
-                    and "disconnect" not in text
-                    and "disconnected" not in text
-                    and "idle" not in text
+                    "reload" not in lowered_text
+                    and "disconnect" not in lowered_text
+                    and "disconnected" not in lowered_text
+                    and "connection" not in lowered_text
+                    and "lost" not in lowered_text
+                    and "retry" not in lowered_text
+                    and "logging" not in lowered_text
+                    and "login" not in lowered_text
+                    and "idle" not in lowered_text
             ):
                 return False
 
             self.disconnect_reload_attempts += 1
             self.window_controller.keys_up(list("wasd"))
-            print(f"Disconnect/reload screen detected, recovery attempt {self.disconnect_reload_attempts}.")
+            print(f"Disconnect/login screen detected, recovery attempt {self.disconnect_reload_attempts}.")
             if self.disconnect_reload_attempts >= 3:
-                print("Reload did not clear disconnect screen; restarting Brawl Stars.")
+                print("Retry did not clear disconnect screen; restarting Brawl Stars.")
                 self.restart_brawl_stars()
                 self.disconnect_reload_attempts = 0
             else:
-                self.window_controller.click(550, 450, already_include_ratio=False)
+                self.window_controller.click(650, 610, delay=0.08, already_include_ratio=False)
                 time.sleep(3)
             return True
 

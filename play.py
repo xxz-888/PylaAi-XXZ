@@ -188,17 +188,19 @@ class Movement:
 
     @staticmethod
     def should_use_super_on_enemy(brawler, super_type, enemy_distance, attack_range, super_range, enemy_hittable):
-        close_combat_range = max(super_range, attack_range)
-        emergency_range = max(260, min(close_combat_range, attack_range * 0.85))
-        if enemy_distance <= emergency_range:
+        utility_super = super_type in {"spawnable", "other", "other_target"}
+        charge_super = super_type == "charge"
+        if enemy_hittable and enemy_distance <= super_range:
             return True
-        if not enemy_hittable:
-            return False
-        if enemy_distance <= close_combat_range:
+        if enemy_hittable and super_type == "damage" and enemy_distance <= max(super_range, attack_range):
             return True
-        if super_type in ["spawnable", "other"]:
+        if utility_super and enemy_distance <= max(super_range, attack_range):
             return True
-        if brawler in ["stu", "surge"] and super_type == "charge" and enemy_distance <= super_range + attack_range:
+        if (
+                charge_super
+                and enemy_distance <= max(super_range + attack_range, attack_range * 1.25)
+                and (enemy_hittable or brawler in {"stu", "surge"})
+        ):
             return True
         return False
 
@@ -1524,6 +1526,8 @@ class Play(Movement):
         return False
 
     def remember_ability_ready(self, ability_name, detected_ready, current_time):
+        if ability_name != "super":
+            return bool(detected_ready)
         seen_attr = f"_{ability_name}_ready_seen_at"
         if detected_ready:
             setattr(self, seen_attr, current_time)
@@ -1536,36 +1540,16 @@ class Play(Movement):
         setattr(self, f"is_{ability_name}_ready", False)
 
     def try_use_ready_abilities_when_enemy_visible(self, enemy_data):
-        if not enemy_data:
-            return False
-        used_any = False
-        now = time.time()
-        if self.should_use_gadget and self.is_gadget_ready and self.time_since_holding_attack is None:
-            if self.use_gadget():
-                self.time_since_gadget_checked = now
-                self.clear_ability_ready("gadget")
-                used_any = True
-        if self.is_hypercharge_ready and self.is_super_ready:
-            if self.use_hypercharge():
-                self.time_since_hypercharge_checked = now
-                self.clear_ability_ready("hypercharge")
-                used_any = True
-        if self.is_super_ready:
-            self.release_held_attack_for_super()
-            if self.use_super():
-                self.time_since_super_checked = now
-                self.clear_ability_ready("super")
-                used_any = True
-        return used_any
+        return False
 
     def refresh_ready_abilities(self, frame, current_time):
         if current_time - self.time_since_hypercharge_checked > self.hypercharge_treshold:
             detected = self.check_if_hypercharge_ready(frame)
-            self.is_hypercharge_ready = self.remember_ability_ready("hypercharge", detected, current_time)
+            self.is_hypercharge_ready = bool(detected)
             self.time_since_hypercharge_checked = current_time
         if current_time - self.time_since_gadget_checked > self.gadget_treshold:
             detected = self.check_if_gadget_ready(frame)
-            self.is_gadget_ready = self.remember_ability_ready("gadget", detected, current_time)
+            self.is_gadget_ready = bool(detected)
             self.time_since_gadget_checked = current_time
         if current_time - self.time_since_super_checked > self.super_treshold:
             detected = self.check_if_super_ready(frame)
@@ -1830,10 +1814,6 @@ class Play(Movement):
     def main(self, frame, brawler, main):
         current_time = time.time()
         raw_data = self.get_main_data(frame)
-        raw_enemy_data = raw_data.get("enemy", []) if raw_data else []
-        if raw_enemy_data and getattr(main, "state", None) == "match":
-            self.refresh_ready_abilities(frame, current_time)
-            self.try_use_ready_abilities_when_enemy_visible(raw_enemy_data)
         data = raw_data
         if self.should_detect_walls and current_time - self.time_since_walls_checked > self.walls_treshold:
 
@@ -1879,7 +1859,6 @@ class Play(Movement):
         self.refresh_ready_abilities(frame, current_time)
 
         self.current_frame = frame
-        self.try_use_ready_abilities_when_enemy_visible(data.get("enemy"))
         movement = self.loop(brawler, data, current_time)
 
         if visual_debug:

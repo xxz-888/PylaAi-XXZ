@@ -907,5 +907,41 @@
         "super_range": 341,
         "super_type": "damage",
         "hold_attack": 0
+    },
+    "damian": {
+        "safe_range": 0,
+        "attack_range": 213,
+        "super_type": "damage",
+        "super_range": 256,
+        "ignore_walls_for_attacks": true,
+        "ignore_walls_for_supers": false,
+        "hold_attack": 0
+    },
+    "starrnova": {
+        "safe_range": 96,
+        "attack_range": 320,
+        "super_type": "other",
+        "super_range": 469,
+        "ignore_walls_for_attacks": false,
+        "ignore_walls_for_supers": true,
+        "hold_attack": 0
+    },
+    "bolt": {
+        "safe_range": 0,
+        "attack_range": 192,
+        "super_type": "charge",
+        "super_range": 448,
+        "ignore_walls_for_attacks": false,
+        "ignore_walls_for_supers": false,
+        "hold_attack": 0
+    },
+    "buzzlightyear": {
+        "safe_range": 328,
+        "attack_range": 533,
+        "super_type": "damage",
+        "super_range": 469,
+        "ignore_walls_for_attacks": false,
+        "ignore_walls_for_supers": true,
+        "hold_attack": 0
     }
 }

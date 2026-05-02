@@ -30,8 +30,8 @@ class SuperUsageTests(unittest.TestCase):
             )
         )
 
-    def test_close_enemy_uses_super_even_when_hittable_check_fails(self):
-        self.assertTrue(
+    def test_damage_super_waits_when_enemy_is_not_hittable(self):
+        self.assertFalse(
             Movement.should_use_super_on_enemy(
                 "shelly",
                 "damage",
@@ -52,7 +52,7 @@ class SuperUsageTests(unittest.TestCase):
         play.last_super_time = 0.0
         play.brawler_ranges = {"shelly": (301, 490, 490)}
         play.get_brawler_range = lambda brawler: play.brawler_ranges[brawler]
-        play.is_enemy_hittable = lambda *args, **kwargs: False
+        play.is_enemy_hittable = lambda *args, **kwargs: True
 
         used = play.try_use_super_on_enemy(
             "shelly",
@@ -76,7 +76,7 @@ class SuperUsageTests(unittest.TestCase):
         play._gadget_ready_seen_at = 10.0
 
         self.assertTrue(play.remember_ability_ready("super", detected_ready=False, current_time=10.5))
-        self.assertTrue(play.remember_ability_ready("gadget", detected_ready=False, current_time=10.5))
+        self.assertFalse(play.remember_ability_ready("gadget", detected_ready=False, current_time=10.5))
         self.assertFalse(play.remember_ability_ready("super", detected_ready=False, current_time=12.0))
 
     def test_super_and_gadget_taps_are_long_enough_for_emulators(self):
@@ -93,7 +93,7 @@ class SuperUsageTests(unittest.TestCase):
         self.assertEqual(movement.window_controller.keys[0], ("E", {"delay": 0.035}))
         self.assertEqual(movement.window_controller.keys[1], ("G", {"delay": 0.035}))
 
-    def test_visible_enemy_fallback_uses_ready_super_and_gadget(self):
+    def test_visible_enemy_fallback_does_not_spam_ready_super_and_gadget(self):
         play = Play.__new__(Play)
         play.window_controller = FakeWindow()
         play.should_use_gadget = True
@@ -112,10 +112,10 @@ class SuperUsageTests(unittest.TestCase):
 
         used = play.try_use_ready_abilities_when_enemy_visible([[10, 10, 20, 20]])
 
-        self.assertTrue(used)
-        self.assertEqual([key for key, _ in play.window_controller.keys], ["G", "E"])
-        self.assertFalse(play.is_gadget_ready)
-        self.assertFalse(play.is_super_ready)
+        self.assertFalse(used)
+        self.assertEqual(play.window_controller.keys, [])
+        self.assertTrue(play.is_gadget_ready)
+        self.assertTrue(play.is_super_ready)
 
     def test_super_ready_detection_allows_button_layout_drift(self):
         play = Play.__new__(Play)
@@ -139,7 +139,7 @@ class SuperUsageTests(unittest.TestCase):
 
         self.assertTrue(play.check_if_gadget_ready(frame))
 
-    def test_visible_enemy_can_use_abilities_before_player_validation(self):
+    def test_visible_enemy_cannot_use_abilities_before_player_validation(self):
         play = Play.__new__(Play)
         play.get_main_data = lambda frame: {"enemy": [[10, 10, 30, 30]], "player": []}
         play.should_detect_walls = False
@@ -171,8 +171,8 @@ class SuperUsageTests(unittest.TestCase):
 
         play.main(frame, "shelly", main)
 
-        self.assertTrue(play.refresh_ready_abilities_called)
-        self.assertTrue(play.used_abilities)
+        self.assertFalse(play.refresh_ready_abilities_called)
+        self.assertFalse(play.used_abilities)
 
 
 if __name__ == "__main__":

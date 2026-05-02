@@ -341,6 +341,8 @@ def is_in_star_drop(image):
 
 
 def get_star_drop_type(image):
+    if is_in_daily_wins_drop(image):
+        return "standard"
     for image_filename in images_with_star_drop:
         if is_template_in_region(image, star_drops_path + image_filename, region_data['star_drop']):
             if image_filename == "angelic_star_drop.png":
@@ -349,6 +351,50 @@ def get_star_drop_type(image):
                 return "demonic"
             return "standard"
     return None
+
+
+def is_in_daily_wins_drop(image):
+    current_height, current_width = image.shape[:2]
+    width_ratio, height_ratio = current_width / orig_screen_width, current_height / orig_screen_height
+
+    def scaled_region(region):
+        x, y, w, h = region
+        return (
+            int(x * width_ratio),
+            int(y * height_ratio),
+            int(w * width_ratio),
+            int(h * height_ratio),
+        )
+
+    cx, cy, cw, ch = scaled_region([430, 90, 900, 760])
+    center = image[cy:cy + ch, cx:cx + cw]
+    if center.size == 0:
+        return False
+
+    hsv = cv2.cvtColor(center, cv2.COLOR_BGR2HSV)
+    bright_green_mask = cv2.inRange(
+        hsv,
+        np.array((42, 100, 120), dtype=np.uint8),
+        np.array((78, 255, 255), dtype=np.uint8),
+    )
+    bright_green_pixels = cv2.countNonZero(bright_green_mask)
+    green_ratio = bright_green_pixels / max(1, center.shape[0] * center.shape[1])
+    if green_ratio < 0.10:
+        return False
+
+    tx, ty, tw, th = scaled_region([0, 0, 520, 170])
+    title = image[ty:ty + th, tx:tx + tw]
+    if title.size == 0:
+        return False
+
+    title_hsv = cv2.cvtColor(title, cv2.COLOR_BGR2HSV)
+    white_mask = cv2.inRange(
+        title_hsv,
+        np.array((0, 0, 160), dtype=np.uint8),
+        np.array((179, 80, 255), dtype=np.uint8),
+    )
+    white_pixels = cv2.countNonZero(white_mask)
+    return white_pixels > int(1800 * width_ratio * height_ratio)
 
 def get_state(screenshot):
     global _last_printed_state
