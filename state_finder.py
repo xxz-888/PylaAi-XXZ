@@ -123,8 +123,9 @@ def get_in_game_state(image):
     if is_in_brawl_pass(image) or is_in_star_road(image):
         return "shop"
 
-    if is_in_star_drop(image):
-        return "star_drop"
+    # Star drops are intentionally not surfaced as a runtime state right now.
+    # The normal post-match/no-detection flow dismisses them, and treating them
+    # as a state caused false positives during matches.
 
     if is_in_trophy_reward(image):
         return "trophy_reward"
