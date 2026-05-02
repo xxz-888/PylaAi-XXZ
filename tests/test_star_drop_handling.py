@@ -45,6 +45,12 @@ class StarDropHandlingTests(unittest.TestCase):
         self.assertEqual(len(manager.window_controller.presses), 5)
         self.assertTrue(all(press == ("Q", 0.005) for press in manager.window_controller.presses))
 
+    def test_missing_star_drop_image_does_not_press(self):
+        manager = self.make_manager()
+        with patch("stage_manager.get_star_drop_type", return_value=None):
+            manager.click_star_drop()
+        self.assertEqual(manager.window_controller.presses, [])
+
     def test_daily_wins_green_reward_is_fast_tap_drop(self):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         green_bgr = cv2.cvtColor(

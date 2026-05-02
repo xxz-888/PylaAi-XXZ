@@ -4,25 +4,42 @@ from main import normalize_detected_state
 
 
 class StateTransitionGuardTests(unittest.TestCase):
-    def test_prestige_reward_is_ignored_until_lobby_was_seen(self):
-        self.assertEqual(
-            normalize_detected_state(
-                "prestige_reward",
-                previous_state="match",
-                lobby_seen_since_match=False,
-            ),
-            "match",
-        )
+    def test_out_of_match_rewards_are_ignored_until_lobby_was_seen(self):
+        for state in ("prestige_reward", "star_drop", "trophy_reward"):
+            with self.subTest(state=state):
+                self.assertEqual(
+                    normalize_detected_state(
+                        state,
+                        previous_state="match",
+                        lobby_seen_since_match=False,
+                    ),
+                    "match",
+                )
 
-    def test_prestige_reward_is_allowed_after_lobby_was_seen(self):
-        self.assertEqual(
-            normalize_detected_state(
-                "prestige_reward",
-                previous_state="lobby",
-                lobby_seen_since_match=True,
-            ),
-            "prestige_reward",
-        )
+    def test_out_of_match_rewards_are_allowed_after_lobby_was_seen(self):
+        for state in ("prestige_reward", "star_drop", "trophy_reward"):
+            with self.subTest(state=state):
+                self.assertEqual(
+                    normalize_detected_state(
+                        state,
+                        previous_state="lobby",
+                        lobby_seen_since_match=True,
+                    ),
+                    state,
+                )
+
+    def test_out_of_match_rewards_are_blocked_after_lobby_start_press(self):
+        for state in ("prestige_reward", "star_drop", "trophy_reward"):
+            with self.subTest(state=state):
+                self.assertEqual(
+                    normalize_detected_state(
+                        state,
+                        previous_state="lobby",
+                        lobby_seen_since_match=True,
+                        match_launch_pending=True,
+                    ),
+                    "match",
+                )
 
     def test_other_states_pass_through(self):
         self.assertEqual(

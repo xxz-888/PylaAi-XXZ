@@ -297,10 +297,8 @@ class StageManager:
                 time.sleep(0.08)
             return
 
-        if self.long_press_star_drop == "yes":
-            self.window_controller.press_key("Q", 10)
-        else:
-            self.window_controller.press_key("Q")
+        print("Star drop state detected, but no star drop image is visible; skipping.")
+        return
 
     def advance_to_next_brawler_after_prestige(self):
         if not self.brawlers_pick_data:

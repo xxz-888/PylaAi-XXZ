@@ -59,8 +59,18 @@ def parse_max_ips(value):
     return max_ips
 
 
-def normalize_detected_state(detected_state, previous_state=None, lobby_seen_since_match=False):
-    if detected_state == "prestige_reward" and not lobby_seen_since_match:
+OUT_OF_MATCH_REWARD_STATES = {"prestige_reward", "star_drop", "trophy_reward"}
+
+
+def normalize_detected_state(
+        detected_state,
+        previous_state=None,
+        lobby_seen_since_match=False,
+        match_launch_pending=False,
+):
+    if detected_state in OUT_OF_MATCH_REWARD_STATES and (
+            not lobby_seen_since_match or match_launch_pending
+    ):
         return "match"
     return detected_state
 
@@ -85,6 +95,7 @@ def pyla_main(data):
             self.initialize_stage_manager()
             self.state = None
             self.lobby_seen_since_match = False
+            self.match_launch_pending = False
             self.last_ignored_prestige_state_time = 0.0
             general_config = load_toml_as_dict("cfg/general_config.toml")
             self.max_ips = parse_max_ips(general_config.get('max_ips', 0))
@@ -436,17 +447,20 @@ def pyla_main(data):
                 detected_state,
                 previous_state=previous_state,
                 lobby_seen_since_match=self.lobby_seen_since_match,
+                match_launch_pending=self.match_launch_pending,
             )
-            if detected_state == "prestige_reward" and state != detected_state:
+            if detected_state in OUT_OF_MATCH_REWARD_STATES and state != detected_state:
                 now = time.time()
                 if now - self.last_ignored_prestige_state_time >= 5.0:
-                    print("Ignoring prestige reward detection until lobby is confirmed after match.")
+                    print(f"Ignoring {detected_state} detection until lobby is confirmed after match.")
                     self.last_ignored_prestige_state_time = now
 
             if state == "match":
                 self.lobby_seen_since_match = False
+                self.match_launch_pending = False
             elif state == "lobby":
                 self.lobby_seen_since_match = True
+                self.match_launch_pending = False
             return state
 
         def manage_time_tasks(self, frame):
@@ -468,6 +482,8 @@ def pyla_main(data):
                     self.match_ready_at = time.time() + self.match_warmup_seconds
                 frame_data = None
                 self.Stage_manager.do_state(state, frame_data)
+                if state == "lobby":
+                    self.match_launch_pending = True
                 self.handle_lobby_watchdog(state)
 
             if self.Time_management.no_detections_check():
