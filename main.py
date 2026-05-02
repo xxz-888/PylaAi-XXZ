@@ -125,6 +125,10 @@ def pyla_main(data):
             self.last_visual_freeze_check = 0.0
             self.last_visual_change_time = time.time()
             self.last_visual_sample = None
+            self.global_freeze_health_interval = float(time_thresholds.get("global_freeze_health_interval", 60.0))
+            self.global_freeze_diff_threshold = float(time_thresholds.get("global_freeze_diff_threshold", 0.20))
+            self.last_global_freeze_check = 0.0
+            self.last_global_freeze_sample = None
             self.lobby_start_retry_interval = float(time_thresholds.get("lobby_start_retry", 8.0))
             self.lobby_stuck_restart_seconds = float(time_thresholds.get("lobby_stuck_restart", 120.0))
             self.lobby_entered_at = None
@@ -418,6 +422,32 @@ def pyla_main(data):
             self.restart_brawl_stars()
             return True
 
+        def handle_global_screen_freeze(self, frame):
+            now = time.time()
+            if now - self.last_global_freeze_check < self.global_freeze_health_interval:
+                return False
+            self.last_global_freeze_check = now
+
+            sample = cv2.resize(frame, (96, 54), interpolation=cv2.INTER_AREA)
+            sample = cv2.cvtColor(sample, cv2.COLOR_RGB2GRAY)
+            if self.last_global_freeze_sample is None:
+                self.last_global_freeze_sample = sample
+                return False
+
+            diff = float(cv2.absdiff(sample, self.last_global_freeze_sample).mean())
+            self.last_global_freeze_sample = sample
+            if diff >= self.global_freeze_diff_threshold:
+                return False
+
+            print(
+                "Screen health check found no visible change for "
+                f"{self.global_freeze_health_interval:.0f}s (diff {diff:.3f}); "
+                "restarting Brawl Stars and scrcpy."
+            )
+            self.window_controller.keys_up(list("wasd"))
+            self.restart_brawl_stars()
+            return True
+
         def handle_lobby_watchdog(self, state):
             now = time.time()
             if state != "lobby" or self.in_cooldown:
@@ -691,6 +721,9 @@ def pyla_main(data):
                     continue
 
                 self.stale_feed_recovery_attempts = 0
+
+                if self.handle_global_screen_freeze(frame):
+                    continue
 
                 frame_id = self.window_controller.get_latest_frame_id()
                 self.record_new_frame_for_perf(frame_id)

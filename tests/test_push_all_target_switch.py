@@ -300,6 +300,41 @@ class PushAllTargetSwitchTest(unittest.TestCase):
         self.assertEqual(manager.Trophy_observer.current_trophies, 48)
         self.assertEqual(manager.Lobby_automation.lowest_calls, 0)
 
+    @patch("stage_manager.save_brawler_data")
+    @patch("stage_manager.fetch_brawl_stars_player")
+    @patch("stage_manager.load_brawl_stars_api_config")
+    @patch("stage_manager.time.sleep", return_value=None)
+    @patch("stage_manager.get_state", return_value="lobby")
+    def test_push_all_forces_token_refresh_after_access_denied(
+            self,
+            _mock_get_state,
+            _mock_sleep,
+            mock_api_config,
+            mock_fetch_player,
+            _mock_save,
+    ):
+        manager = self.make_manager(1000)
+        manager.Trophy_observer = DummyTrophyObserver(560)
+        mock_api_config.side_effect = [
+            {"api_token": "old_token", "player_tag": "#TAG", "timeout_seconds": 15},
+            {"api_token": "new_token", "player_tag": "#TAG", "timeout_seconds": 15},
+        ]
+        mock_fetch_player.side_effect = [
+            RuntimeError("Brawl Stars API accessDenied. token rejected."),
+            {"brawlers": [
+                {"name": "FIRST", "trophies": 560},
+                {"name": "SECOND", "trophies": 25},
+            ]},
+        ]
+
+        manager.start_game()
+
+        self.assertEqual(mock_api_config.call_args_list[0].kwargs.get("force_refresh"), False)
+        self.assertEqual(mock_api_config.call_args_list[1].kwargs.get("force_refresh"), True)
+        self.assertEqual(mock_fetch_player.call_count, 2)
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "first")
+        self.assertEqual(manager.Lobby_automation.lowest_calls, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

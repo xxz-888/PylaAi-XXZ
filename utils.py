@@ -68,7 +68,7 @@ def get_public_ip(service_url="https://api.ipify.org"):
     return ip_address
 
 
-def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_api.toml"):
+def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_api.toml", force=False):
     global _brawl_stars_api_refresh_done, _brawl_stars_api_refresh_signature
     if not _config_bool(config.get("auto_refresh_token"), False):
         _brawl_stars_api_refresh_done = True
@@ -81,6 +81,8 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
     refresh_signature = (str(file_path), email, password, player_tag)
 
     if (
+            not force
+            and
             _brawl_stars_api_refresh_done
             and _brawl_stars_api_refresh_signature == refresh_signature
             and existing_token
@@ -281,12 +283,14 @@ def fetch_brawl_stars_player(api_token, player_tag, timeout=15):
     raise RuntimeError(f"Brawl Stars API error {response.status_code}: {reason}")
 
 
-def load_brawl_stars_api_config(file_path="cfg/brawl_stars_api.toml"):
+def load_brawl_stars_api_config(file_path="cfg/brawl_stars_api.toml", force_refresh=False):
     try:
         clear_toml_cache(file_path)
         config = load_toml_as_dict(file_path)
         config = dict(config)
         config["player_tag"] = get_config_player_tag(config)
+        if force_refresh:
+            return refresh_brawl_stars_api_token_if_enabled(config, file_path, force=True)
         return refresh_brawl_stars_api_token_if_enabled(config, file_path)
     except toml.TomlDecodeError:
         pass
@@ -342,6 +346,8 @@ def load_brawl_stars_api_config(file_path="cfg/brawl_stars_api.toml"):
         if match:
             config[key] = match.group(1).lower() == "true"
 
+    if force_refresh:
+        return refresh_brawl_stars_api_token_if_enabled(config, file_path, force=True)
     return refresh_brawl_stars_api_token_if_enabled(config, file_path)
 
 

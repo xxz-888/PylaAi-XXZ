@@ -86,14 +86,14 @@ class SuperUsageTests(unittest.TestCase):
         self.assertEqual(play.window_controller.keys[0][1], {"touch_up": True, "touch_down": False})
         self.assertEqual(play.window_controller.keys[1][0], "E")
 
-    def test_super_ready_memory_survives_one_missed_hud_scan(self):
+    def test_super_ready_does_not_survive_missed_hud_scan(self):
         play = Play.__new__(Play)
         play.ability_ready_memory_seconds = 1.25
         play._super_ready_seen_at = 10.0
         play._gadget_ready_seen_at = 10.0
         play._hypercharge_ready_seen_at = 10.0
 
-        self.assertTrue(play.remember_ability_ready("super", detected_ready=False, current_time=10.5))
+        self.assertFalse(play.remember_ability_ready("super", detected_ready=False, current_time=10.5))
         self.assertFalse(play.remember_ability_ready("gadget", detected_ready=False, current_time=10.5))
         self.assertFalse(play.remember_ability_ready("hypercharge", detected_ready=False, current_time=10.5))
         self.assertFalse(play.remember_ability_ready("super", detected_ready=False, current_time=12.0))
@@ -136,7 +136,7 @@ class SuperUsageTests(unittest.TestCase):
         self.assertTrue(play.is_gadget_ready)
         self.assertTrue(play.is_super_ready)
 
-    def test_super_ready_detection_allows_button_layout_drift(self):
+    def test_super_ready_detection_rejects_color_outside_button_crop(self):
         play = Play.__new__(Play)
         play.window_controller = FakeWindow()
         play.super_crop_area = [1460, 830, 1560, 930]
@@ -145,7 +145,7 @@ class SuperUsageTests(unittest.TestCase):
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         cv2.circle(frame, (1580, 950), 52, (255, 170, 0), -1)
 
-        self.assertTrue(play.check_if_super_ready(frame))
+        self.assertFalse(play.check_if_super_ready(frame))
 
     def test_super_ready_detection_scales_threshold_for_scrcpy_width(self):
         play = Play.__new__(Play)
@@ -154,9 +154,20 @@ class SuperUsageTests(unittest.TestCase):
         play.super_pixels_minimum = 1800
 
         frame = np.zeros((540, 960, 3), dtype=np.uint8)
-        frame[430:460, 740:770] = (255, 170, 0)
+        frame[425:460, 735:770] = (255, 170, 0)
 
         self.assertTrue(play.check_if_super_ready(frame))
+
+    def test_super_ready_detection_rejects_yellow_button_edge_only(self):
+        play = Play.__new__(Play)
+        play.window_controller = HalfScaleWindow()
+        play.super_crop_area = [1460, 830, 1560, 930]
+        play.super_pixels_minimum = 1800
+
+        frame = np.zeros((540, 960, 3), dtype=np.uint8)
+        frame[458:470, 730:780] = (255, 170, 0)
+
+        self.assertFalse(play.check_if_super_ready(frame))
 
     def test_hypercharge_ready_detection_scales_threshold_for_scrcpy_width(self):
         play = Play.__new__(Play)

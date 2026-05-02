@@ -1643,14 +1643,11 @@ class Play(Movement):
         return False
 
     def remember_ability_ready(self, ability_name, detected_ready, current_time):
-        if ability_name != "super":
-            return bool(detected_ready)
         seen_attr = f"_{ability_name}_ready_seen_at"
         if detected_ready:
             setattr(self, seen_attr, current_time)
             return True
-        seen_at = float(getattr(self, seen_attr, 0.0) or 0.0)
-        return bool(seen_at and current_time - seen_at <= self.ability_ready_memory_seconds)
+        return False
 
     def clear_ability_ready(self, ability_name):
         setattr(self, f"_{ability_name}_ready_seen_at", 0.0)
@@ -1720,25 +1717,12 @@ class Play(Movement):
         screenshot = frame[y1:y2, x1:x2]
         yellow_pixels = count_hsv_pixels(screenshot, (17, 170, 200), (27, 255, 255))
         orange_pixels = count_hsv_pixels(screenshot, (8, 120, 150), (38, 255, 255))
-
-        pad_x = max(12, int((x2 - x1) * 0.35))
-        pad_y = max(12, int((y2 - y1) * 0.35))
-        h, w = frame.shape[:2]
-        wx1 = max(0, x1 - pad_x)
-        wy1 = max(0, y1 - pad_y)
-        wx2 = min(w, x2 + pad_x)
-        wy2 = min(h, y2 + pad_y)
-        wide_screenshot = frame[wy1:wy2, wx1:wx2]
-        wide_yellow_pixels = count_hsv_pixels(wide_screenshot, (17, 170, 200), (27, 255, 255))
-        wide_orange_pixels = count_hsv_pixels(wide_screenshot, (8, 120, 150), (38, 255, 255))
-        threshold = self._scaled_pixel_threshold(self.super_pixels_minimum, screenshot, self.super_crop_area)
+        threshold = self._scaled_pixel_threshold(self.super_pixels_minimum, screenshot, self.super_crop_area) * 2.0
         if debug:
             print(
                 "super pixels:",
                 f"yellow={yellow_pixels}",
                 f"orange={orange_pixels}",
-                f"wide_yellow={wide_yellow_pixels}",
-                f"wide_orange={wide_orange_pixels}",
                 f"threshold={threshold}",
                 "(if above threshold, super is ready)",
             )
@@ -1747,10 +1731,6 @@ class Play(Movement):
         if yellow_pixels > threshold:
             return True
         if orange_pixels > threshold * 1.25:
-            return True
-        if wide_yellow_pixels > threshold * 1.5:
-            return True
-        if wide_orange_pixels > threshold * 1.5:
             return True
         return False
 

@@ -199,12 +199,17 @@ class StageManager:
 
         old_front_brawler = self.brawlers_pick_data[0].get("brawler")
         try:
-            api_config = load_brawl_stars_api_config("cfg/brawl_stars_api.toml")
-            player_data = fetch_brawl_stars_player(
-                api_config.get("api_token", "").strip(),
-                api_config.get("player_tag", "").strip(),
-                int(api_config.get("timeout_seconds", 15)),
-            )
+            player_data = self.fetch_push_all_player_data(force_token_refresh=False)
+        except RuntimeError as e:
+            if "accessDenied" not in str(e):
+                print(f"Push All API trophy refresh failed; using local trophies. {e}")
+                return False
+            try:
+                print("Push All API token was rejected; refreshing token for current public IP and retrying.")
+                player_data = self.fetch_push_all_player_data(force_token_refresh=True)
+            except Exception as retry_error:
+                print(f"Push All API trophy refresh failed after token refresh; using local trophies. {retry_error}")
+                return False
         except Exception as e:
             print(f"Push All API trophy refresh failed; using local trophies. {e}")
             return False
@@ -292,6 +297,18 @@ class StageManager:
                 print("Push All API trophies refreshed; keeping current brawler until target.")
             save_brawler_data(self.brawlers_pick_data)
         return changed
+
+    @staticmethod
+    def fetch_push_all_player_data(force_token_refresh=False):
+        api_config = load_brawl_stars_api_config(
+            "cfg/brawl_stars_api.toml",
+            force_refresh=force_token_refresh,
+        )
+        return fetch_brawl_stars_player(
+            api_config.get("api_token", "").strip(),
+            api_config.get("player_tag", "").strip(),
+            int(api_config.get("timeout_seconds", 15)),
+        )
 
     def start_game(self):
         print("state is lobby, starting game")
