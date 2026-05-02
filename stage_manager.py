@@ -297,7 +297,6 @@ class StageManager:
                 time.sleep(0.08)
             return
 
-        print("Star drop state detected, but no star drop image is visible; skipping.")
         return
 
     def advance_to_next_brawler_after_prestige(self):
