@@ -59,7 +59,7 @@ def parse_max_ips(value):
     return max_ips
 
 
-OUT_OF_MATCH_REWARD_STATES = {"prestige_reward", "star_drop", "trophy_reward"}
+OUT_OF_MATCH_REWARD_STATES = {"prestige_reward", "trophy_reward"}
 
 
 def normalize_detected_state(
