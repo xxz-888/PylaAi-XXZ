@@ -60,6 +60,15 @@ def parse_max_ips(value):
 
 
 OUT_OF_MATCH_REWARD_STATES = {"prestige_reward", "trophy_reward"}
+MATCH_RESULT_STATES = {
+    "end_victory",
+    "end_defeat",
+    "end_draw",
+    "end_1st",
+    "end_2nd",
+    "end_3rd",
+    "end_4th",
+}
 
 
 def normalize_detected_state(
@@ -67,10 +76,13 @@ def normalize_detected_state(
         previous_state=None,
         lobby_seen_since_match=False,
         match_launch_pending=False,
+        match_result_seen=False,
 ):
-    if detected_state in OUT_OF_MATCH_REWARD_STATES and (
-            not lobby_seen_since_match or match_launch_pending
+    if detected_state in OUT_OF_MATCH_REWARD_STATES and not (
+            lobby_seen_since_match or match_result_seen
     ):
+        return "match"
+    if detected_state in OUT_OF_MATCH_REWARD_STATES and match_launch_pending and not match_result_seen:
         return "match"
     return detected_state
 
@@ -98,6 +110,7 @@ def pyla_main(data):
             self.match_launch_pending = False
             self.pending_lobby_since = None
             self.pending_lobby_notice = 0.0
+            self.post_match_reward_until = 0.0
             self.last_ignored_prestige_state_time = 0.0
             general_config = load_toml_as_dict("cfg/general_config.toml")
             self.max_ips = parse_max_ips(general_config.get('max_ips', 0))
@@ -138,6 +151,9 @@ def pyla_main(data):
             )
             self.lobby_after_match_detection_quiet_seconds = float(
                 time_thresholds.get("lobby_after_match_detection_quiet_seconds", 3.0)
+            )
+            self.post_match_reward_window_seconds = float(
+                time_thresholds.get("post_match_reward_window_seconds", 120.0)
             )
             self.lobby_entered_at = None
             self.last_lobby_start_press = 0.0
@@ -481,13 +497,17 @@ def pyla_main(data):
             return True
 
         def apply_state_context_guard(self, detected_state, previous_state):
+            now = time.time()
+            if detected_state in MATCH_RESULT_STATES:
+                self.post_match_reward_until = now + self.post_match_reward_window_seconds
+
             state = normalize_detected_state(
                 detected_state,
                 previous_state=previous_state,
                 lobby_seen_since_match=self.lobby_seen_since_match,
                 match_launch_pending=self.match_launch_pending,
+                match_result_seen=now <= self.post_match_reward_until,
             )
-            now = time.time()
             if detected_state != "lobby":
                 self.pending_lobby_since = None
 
@@ -517,12 +537,14 @@ def pyla_main(data):
 
             if detected_state in OUT_OF_MATCH_REWARD_STATES and state != detected_state:
                 if now - self.last_ignored_prestige_state_time >= 5.0:
-                    print(f"Ignoring {detected_state} detection until lobby is confirmed after match.")
+                    print(f"Ignoring {detected_state} detection until a match result or lobby is confirmed.")
                     self.last_ignored_prestige_state_time = now
 
             if state == "match":
                 self.lobby_seen_since_match = False
                 self.match_launch_pending = False
+                if previous_state == "lobby":
+                    self.post_match_reward_until = 0.0
             elif state == "lobby":
                 self.lobby_seen_since_match = True
                 self.match_launch_pending = False
