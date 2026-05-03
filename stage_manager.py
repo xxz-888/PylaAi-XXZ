@@ -7,7 +7,13 @@ import time
 import cv2
 import numpy as np
 
-from state_finder import get_state, find_game_result, is_in_prestige_reward, get_prestige_next_button_center
+from state_finder import (
+    get_state,
+    find_game_result,
+    is_in_prestige_reward,
+    get_prestige_next_button_center,
+    get_team_invite_reject_button_center,
+)
 from trophy_observer import TrophyObserver
 from utils import find_template_center, load_toml_as_dict, async_notify_user, \
     save_brawler_data, extract_text_strings, load_brawl_stars_api_config, fetch_brawl_stars_player, normalize_brawler_name
@@ -55,6 +61,9 @@ class StageManager:
         self.last_recorded_result_time = 0.0
         self.last_recorded_result = None
         self.active_end_result = None
+        self.last_team_invite_reject_time = 0.0
+        self.stop_after_post_match_rewards = False
+        self.completion_notification_sent = False
         time_thresholds = load_toml_as_dict("./cfg/time_tresholds.toml")
         self.end_screen_dismiss_delay = float(time_thresholds.get("end_screen_dismiss_delay", 0.35))
         self.window_controller = window_controller
@@ -312,6 +321,13 @@ class StageManager:
 
     def start_game(self):
         print("state is lobby, starting game")
+        if self.stop_after_post_match_rewards:
+            print("Post-match rewards cleared; stopping after completed target.")
+            if os.path.exists("latest_brawler_data.json"):
+                os.remove("latest_brawler_data.json")
+            self.window_controller.keys_up(list("wasd"))
+            self.window_controller.close()
+            sys.exit(0)
         self.push_all_needs_selection = False
         self.refresh_push_all_trophies_from_api()
         if not self.brawlers_pick_data:
@@ -427,6 +443,7 @@ class StageManager:
 
         if len(self.brawlers_pick_data) <= 1:
             print("Prestige reward reached, but no next brawler is queued.")
+            self.stop_after_post_match_rewards = True
             save_brawler_data(self.brawlers_pick_data)
             return False
 
@@ -501,7 +518,9 @@ class StageManager:
             self.brawlers_pick_data[0]["trophies"] = lobby_trophies
             save_brawler_data(self.brawlers_pick_data)
 
-        if lobby_trophies is None or lobby_trophies > 20:
+        if lobby_trophies is None:
+            print("Could not read lobby trophies after prestige; trusting confirmed prestige reward screen.")
+        elif lobby_trophies > 20:
             print("Reward screen did not confirm a 1k trophy reset; not forcing brawler switch.")
             return
 
@@ -572,22 +591,19 @@ class StageManager:
                     if len(self.brawlers_pick_data) <= 1:
                         print(
                             "Brawler reached required trophies/wins. No more brawlers selected for pushing in the menu. "
-                            "Bot will now pause itself until closed.")
-                        screenshot = self.window_controller.screenshot()
-                        self.send_webhook_notification(
-                            "completed",
-                            screenshot,
-                            self.current_target_details({
-                                "result": found_game_result,
-                                "target": push_current_brawler_till,
-                            }),
-                        )
-                        if os.path.exists("latest_brawler_data.json"):
-                            os.remove("latest_brawler_data.json")
-                        print("Bot stopping: all targets completed.")
-                        self.window_controller.keys_up(list("wasd"))
-                        self.window_controller.close()
-                        sys.exit(0)
+                            "Bot will finish reward screens before stopping.")
+                        self.stop_after_post_match_rewards = True
+                        if not self.completion_notification_sent:
+                            screenshot = self.window_controller.screenshot()
+                            self.send_webhook_notification(
+                                "completed",
+                                screenshot,
+                                self.current_target_details({
+                                    "result": found_game_result,
+                                    "target": push_current_brawler_till,
+                                }),
+                            )
+                            self.completion_notification_sent = True
             
             # Keep pressing the dismiss key on every iteration until the
             # end-of-match screens give way. One press is rarely enough in
@@ -607,11 +623,40 @@ class StageManager:
 
     def close_pop_up(self):
         screenshot = self.window_controller.screenshot()
+        team_invite_reject = get_team_invite_reject_button_center(screenshot, image_is_rgb=True)
+        if team_invite_reject:
+            now = time.time()
+            if now - self.last_team_invite_reject_time < 0.6:
+                return
+            self.last_team_invite_reject_time = now
+            print("Team invite popup detected; rejecting invite.")
+            self.window_controller.keys_up(list("wasd"))
+            self.window_controller.click(*team_invite_reject, delay=0.08)
+            self.tap_with_adb_fallback(*team_invite_reject, screenshot_shape=screenshot.shape)
+            return
         if self.close_popup_icon is None:
             self.close_popup_icon = load_image("images/states/close_popup.png", self.window_controller.scale_factor)
         popup_location = find_template_center(screenshot, self.close_popup_icon)
         if popup_location:
             self.window_controller.click(*popup_location)
+
+    def tap_with_adb_fallback(self, x, y, screenshot_shape=None):
+        try:
+            device = getattr(self.window_controller, "device", None)
+            if device is None:
+                return False
+            target_x = x
+            target_y = y
+            if screenshot_shape is not None:
+                frame_h, frame_w = screenshot_shape[:2]
+                size = device.window_size()
+                target_x = x * (size.width / max(1, frame_w))
+                target_y = y * (size.height / max(1, frame_h))
+            device.shell(f"input tap {int(target_x)} {int(target_y)}")
+            return True
+        except Exception as e:
+            print(f"ADB fallback tap failed: {e}")
+            return False
 
     def do_state(self, state, data=None):
         if not str(state).startswith("end"):

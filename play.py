@@ -98,6 +98,8 @@ class Movement:
         self.strafe_blend = float(bot_config.get("strafe_blend", 0.35))
         self._strafe_started_at = 0.0
         self._strafe_side = 1
+        self.combat_dodge_blend = float(bot_config.get("combat_dodge_blend", 0.45))
+        self.combat_dodge_jitter_degrees = float(bot_config.get("combat_dodge_jitter_degrees", 18.0))
         self.enemy_pressure_move_range_multiplier = float(bot_config.get("enemy_pressure_move_range_multiplier", 1.15))
         self.lead_shots_enabled = str(bot_config.get("lead_shots", "yes")).lower() in ("yes", "true", "1")
         self.aimed_attacks_enabled = str(bot_config.get("aimed_attacks", "no")).lower() in ("yes", "true", "1")
@@ -240,6 +242,21 @@ class Movement:
         movement = movement.lower()
         translation_table = str.maketrans("wasd", "sdwa")
         return movement.translate(translation_table)
+
+    @staticmethod
+    def movement_to_vector(movement):
+        dx = 0
+        dy = 0
+        movement = str(movement or "").lower()
+        if "a" in movement:
+            dx -= 1
+        if "d" in movement:
+            dx += 1
+        if "w" in movement:
+            dy -= 1
+        if "s" in movement:
+            dy += 1
+        return dx, dy
 
     def unstuck_movement_if_needed(self, movement, current_time=None):
         if current_time is None:
@@ -1034,6 +1051,23 @@ class Play(Movement):
         strafe_offset = 90.0 * self._strafe_side * max(0.55, sine_factor)
         return (toward_enemy_angle + strafe_offset) % 360
 
+    def get_combat_dodge_angle(self, toward_enemy_angle, current_time, enemy_distance=None, safe_range=None):
+        """Sideways movement used while shooting so the bot does not become an easy target."""
+        strafe_angle = self.get_strafe_angle(toward_enemy_angle, current_time, enemy_distance, safe_range)
+        jitter = float(getattr(self, "combat_dodge_jitter_degrees", 0.0))
+        if jitter > 0:
+            strafe_angle = (strafe_angle + random.uniform(-jitter, jitter)) % 360
+        return strafe_angle
+
+    def apply_combat_dodge(self, desired_angle, toward_enemy_angle, current_time, enemy_distance, safe_range):
+        if not self.strafe_enabled:
+            return desired_angle
+        dodge_angle = self.get_combat_dodge_angle(toward_enemy_angle, current_time, enemy_distance, safe_range)
+        blend = max(0.0, min(1.0, float(getattr(self, "combat_dodge_blend", 0.0))))
+        if enemy_distance is not None and safe_range is not None and enemy_distance <= safe_range:
+            blend = max(blend, min(0.85, blend + 0.15))
+        return self.blend_angles(desired_angle, dodge_angle, blend)
+
     def track_enemy_velocity(self, enemy_coords, current_time):
         grid = 25
         rounded_key = (round(enemy_coords[0] / grid) * grid, round(enemy_coords[1] / grid) * grid)
@@ -1274,6 +1308,10 @@ class Play(Movement):
                         self.strafe_blend * self.retreat_strafe_fraction,
                     )
                     vlog(f"retreat strafe blend -> desired={desired:.1f}°")
+
+                if self.strafe_enabled and fog_flee_angle is None and enemy_distance <= attack_range:
+                    desired = self.apply_combat_dodge(desired, toward_angle, now_t, enemy_distance, safe_range)
+                    vlog(f"combat dodge blend -> desired={desired:.1f}°")
 
                 if (self.trio_grouping_enabled and teammate_data and enemy_distance > attack_range):
                     closest_teammate, teammate_distance = self.get_closest_teammate(player_data, teammate_data)
@@ -1935,6 +1973,16 @@ class Play(Movement):
         if enemy_distance <= attack_range:
             enemy_hittable = self.is_enemy_hittable(player_pos, enemy_coords, walls, "attack")
             if enemy_hittable:
+                if self.strafe_enabled:
+                    toward_angle = self.angle_from_direction(direction_x, direction_y)
+                    desired = self.apply_combat_dodge(
+                        self.angle_from_direction(*self.movement_to_vector(movement)),
+                        toward_angle,
+                        current_time,
+                        enemy_distance,
+                        safe_range,
+                    )
+                    movement = self.find_best_angle(player_pos, desired, walls)
                 if self.should_use_gadget == True and self.is_gadget_ready and self.time_since_holding_attack is None:
                     if self.use_gadget():
                         self.time_since_gadget_checked = time.time()

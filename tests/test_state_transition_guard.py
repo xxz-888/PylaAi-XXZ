@@ -1,6 +1,6 @@
 import unittest
 
-from main import normalize_detected_state
+from main import normalize_detected_state, should_accept_lobby_after_match
 
 
 class StateTransitionGuardTests(unittest.TestCase):
@@ -79,6 +79,11 @@ class StateTransitionGuardTests(unittest.TestCase):
             ),
             "lobby",
         )
+
+    def test_lobby_after_match_depends_on_stable_lobby_state_not_vision_quietness(self):
+        self.assertFalse(should_accept_lobby_after_match(2.9, 3.0))
+        self.assertTrue(should_accept_lobby_after_match(3.0, 3.0))
+        self.assertTrue(should_accept_lobby_after_match(126.9, 3.0))
 
 
 if __name__ == "__main__":

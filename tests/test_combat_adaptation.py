@@ -11,6 +11,9 @@ class CombatAdaptationTests(unittest.TestCase):
         self.movement._strafe_side = 1
         self.movement._strafe_current_interval = 0.0
         self.movement.strafe_interval = 1.0
+        self.movement.strafe_enabled = True
+        self.movement.combat_dodge_blend = 0.65
+        self.movement.combat_dodge_jitter_degrees = 0.0
         self.movement.projectile_speed_px_s = 900.0
 
     def test_strafe_angle_smoothly_flips_after_interval(self):
@@ -29,6 +32,22 @@ class CombatAdaptationTests(unittest.TestCase):
         self.assertGreater(angle, 0.0)
         self.assertLess(angle, 45.0)
         self.assertFalse(math.isnan(angle))
+
+    def test_combat_dodge_biases_shooting_movement_sideways(self):
+        desired = self.movement.apply_combat_dodge(
+            desired_angle=0,
+            toward_enemy_angle=0,
+            current_time=10.0,
+            enemy_distance=180,
+            safe_range=120,
+        )
+
+        self.assertGreater(desired, 25)
+        self.assertLess(desired, 90)
+
+    def test_movement_to_vector_converts_legacy_keys(self):
+        self.assertEqual(self.movement.movement_to_vector("wd"), (1, -1))
+        self.assertEqual(self.movement.movement_to_vector("as"), (-1, 1))
 
 
 if __name__ == "__main__":

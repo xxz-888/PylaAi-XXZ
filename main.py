@@ -23,7 +23,7 @@ from lobby_automation import LobbyAutomation
 from play import Play
 from runtime_control import RuntimeControlWindow
 from stage_manager import StageManager
-from state_finder import get_state
+from state_finder import get_state, get_starr_nova_got_it_button_center, is_starr_nova_info_screen
 from time_management import TimeManagement
 from utils import (
     api_base_url,
@@ -87,6 +87,10 @@ def normalize_detected_state(
     return detected_state
 
 
+def should_accept_lobby_after_match(pending_for, confirm_seconds):
+    return pending_for >= confirm_seconds
+
+
 def pyla_main(data):
 
     class Main:
@@ -111,6 +115,7 @@ def pyla_main(data):
             self.pending_lobby_since = None
             self.pending_lobby_notice = 0.0
             self.post_match_reward_until = 0.0
+            self.reward_chain_seen = False
             self.last_ignored_prestige_state_time = 0.0
             general_config = load_toml_as_dict("cfg/general_config.toml")
             self.max_ips = parse_max_ips(general_config.get('max_ips', 0))
@@ -144,6 +149,10 @@ def pyla_main(data):
             self.global_freeze_diff_threshold = float(time_thresholds.get("global_freeze_diff_threshold", 0.20))
             self.last_global_freeze_check = 0.0
             self.last_global_freeze_sample = None
+            self.starr_nova_info_check_interval = float(
+                time_thresholds.get("starr_nova_info_check_interval", 60.0)
+            )
+            self.last_starr_nova_info_check = 0.0
             self.lobby_start_retry_interval = float(time_thresholds.get("lobby_start_retry", 8.0))
             self.lobby_stuck_restart_seconds = float(time_thresholds.get("lobby_stuck_restart", 120.0))
             self.lobby_after_match_confirm_seconds = float(
@@ -472,6 +481,23 @@ def pyla_main(data):
             self.restart_brawl_stars()
             return True
 
+        def handle_starr_nova_info_screen(self, frame):
+            now = time.time()
+            if now - self.last_starr_nova_info_check < self.starr_nova_info_check_interval:
+                return False
+            self.last_starr_nova_info_check = now
+
+            screenshot_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            if not is_starr_nova_info_screen(screenshot_bgr):
+                return False
+            button_center = get_starr_nova_got_it_button_center(screenshot_bgr)
+            if button_center is None:
+                return False
+            print("Starr Nova info screen detected; clicking GOT IT.")
+            self.window_controller.keys_up(list("wasd"))
+            self.window_controller.click(*button_center, delay=0.08)
+            return True
+
         def handle_lobby_watchdog(self, state):
             now = time.time()
             if state != "lobby" or self.in_cooldown:
@@ -501,12 +527,17 @@ def pyla_main(data):
             if detected_state in MATCH_RESULT_STATES:
                 self.post_match_reward_until = now + self.post_match_reward_window_seconds
 
+            reward_chain_active = (
+                    self.reward_chain_seen
+                    or previous_state is None
+                    or previous_state in OUT_OF_MATCH_REWARD_STATES
+            )
             state = normalize_detected_state(
                 detected_state,
                 previous_state=previous_state,
                 lobby_seen_since_match=self.lobby_seen_since_match,
                 match_launch_pending=self.match_launch_pending,
-                match_result_seen=now <= self.post_match_reward_until,
+                match_result_seen=(now <= self.post_match_reward_until) or reward_chain_active,
             )
             if detected_state != "lobby":
                 self.pending_lobby_since = None
@@ -515,21 +546,15 @@ def pyla_main(data):
                 if self.pending_lobby_since is None:
                     self.pending_lobby_since = now
                     self.pending_lobby_notice = 0.0
-                recent_detection_age = min(
-                    now - self.Play.time_since_detections.get("player", 0),
-                    now - self.Play.time_since_detections.get("enemy", 0),
-                )
                 pending_for = now - self.pending_lobby_since
-                if (
-                        recent_detection_age < self.lobby_after_match_detection_quiet_seconds
-                        or pending_for < self.lobby_after_match_confirm_seconds
+                if not should_accept_lobby_after_match(
+                        pending_for,
+                        self.lobby_after_match_confirm_seconds,
                 ):
                     if now - self.pending_lobby_notice >= 5.0:
                         print(
                             "Ignoring lobby detection until it is stable after match "
-                            f"({pending_for:.1f}/{self.lobby_after_match_confirm_seconds:.1f}s, "
-                            f"detection quiet {recent_detection_age:.1f}/"
-                            f"{self.lobby_after_match_detection_quiet_seconds:.1f}s)."
+                            f"({pending_for:.1f}/{self.lobby_after_match_confirm_seconds:.1f}s)."
                         )
                         self.pending_lobby_notice = now
                     return "match"
@@ -545,12 +570,19 @@ def pyla_main(data):
                 self.match_launch_pending = False
                 if previous_state == "lobby":
                     self.post_match_reward_until = 0.0
+                    self.reward_chain_seen = False
             elif state == "lobby":
                 self.lobby_seen_since_match = True
                 self.match_launch_pending = False
+                self.reward_chain_seen = False
+            elif state in OUT_OF_MATCH_REWARD_STATES:
+                self.reward_chain_seen = True
             return state
 
         def manage_time_tasks(self, frame):
+            if self.handle_starr_nova_info_screen(frame):
+                return
+
             if self.handle_disconnect_screen(frame):
                 return
 
