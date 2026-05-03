@@ -83,6 +83,86 @@ class BrawlerApiAutofillTest(unittest.TestCase):
             ("cfg/brawl_stars_api.toml", "user@example.com", "secret", "#PLAYER"),
         )
 
+    @patch("utils.save_dict_as_toml")
+    @patch("utils.time.sleep")
+    @patch("utils.get_public_ip", return_value="1.2.3.4")
+    @patch("utils._developer_api_post")
+    def test_auto_refresh_retries_developer_session_not_found(self, mock_post, _mock_ip, _mock_sleep, _mock_save):
+        utils._brawl_stars_api_refresh_done = False
+        utils._brawl_stars_api_refresh_signature = None
+        mock_post.side_effect = [
+            {},
+            RuntimeError("Developer portal error 401 at account/load: Session not found"),
+            {},
+            {"developer": {"allowedScopes": ["brawlstars"]}},
+            {"keys": []},
+            {"key": {"key": "NEW_TOKEN"}},
+        ]
+        config = {
+            "auto_refresh_token": True,
+            "developer_email": "user@example.com",
+            "developer_password": "secret",
+            "player_tag": "#PLAYER",
+            "api_token": "",
+            "timeout_seconds": 15,
+        }
+
+        refreshed = utils.refresh_brawl_stars_api_token_if_enabled(config)
+
+        self.assertEqual(refreshed["api_token"], "NEW_TOKEN")
+        self.assertEqual(
+            [call.args[1] for call in mock_post.call_args_list],
+            ["login", "account/load", "login", "account/load", "apikey/list", "apikey/create"],
+        )
+
+    @patch("utils.refresh_brawl_stars_api_token_if_enabled")
+    def test_load_config_uses_existing_token_when_auto_refresh_session_fails(self, mock_refresh):
+        utils._brawl_stars_api_refresh_done = False
+        utils._brawl_stars_api_refresh_signature = None
+        mock_refresh.side_effect = RuntimeError("Developer portal error 401 at account/load: Session not found")
+        path = "cfg/test_brawl_stars_api_existing_token.toml"
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(
+                    'api_token = "OLD_TOKEN"\n'
+                    'player_tag = "#PLAYER"\n'
+                    'auto_refresh_token = true\n'
+                    'developer_email = "user@example.com"\n'
+                    'developer_password = "secret"\n'
+                )
+
+            config = utils.load_brawl_stars_api_config(path)
+
+            self.assertEqual(config["api_token"], "OLD_TOKEN")
+            self.assertTrue(utils._brawl_stars_api_refresh_done)
+        finally:
+            import os
+            utils.clear_toml_cache(path)
+            if os.path.exists(path):
+                os.remove(path)
+
+    @patch("utils.refresh_brawl_stars_api_token_if_enabled")
+    def test_force_refresh_still_reports_developer_refresh_failure(self, mock_refresh):
+        mock_refresh.side_effect = RuntimeError("Developer portal error 401 at account/load: Session not found")
+        path = "cfg/test_brawl_stars_api_force_refresh.toml"
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(
+                    'api_token = "OLD_TOKEN"\n'
+                    'player_tag = "#PLAYER"\n'
+                    'auto_refresh_token = true\n'
+                    'developer_email = "user@example.com"\n'
+                    'developer_password = "secret"\n'
+                )
+
+            with self.assertRaisesRegex(RuntimeError, "Session not found"):
+                utils.load_brawl_stars_api_config(path, force_refresh=True)
+        finally:
+            import os
+            utils.clear_toml_cache(path)
+            if os.path.exists(path):
+                os.remove(path)
+
     @patch("utils.refresh_brawl_stars_api_token_if_enabled")
     def test_api_config_is_reloaded_fresh(self, mock_refresh):
         mock_refresh.side_effect = lambda config, file_path: config

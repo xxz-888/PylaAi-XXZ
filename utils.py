@@ -53,6 +53,20 @@ def _developer_api_post(session, endpoint, payload, timeout):
     raise RuntimeError(f"Developer portal error {response.status_code} at {endpoint}: {reason}")
 
 
+def _is_developer_session_not_found(error):
+    text = str(error).lower()
+    return "account/load" in text and "401" in text and "session not found" in text
+
+
+def _api_refresh_signature(file_path, config):
+    return (
+        str(file_path),
+        str(config.get("developer_email", "")).strip(),
+        str(config.get("developer_password", "")).strip(),
+        str(config.get("player_tag", "")).strip(),
+    )
+
+
 def _extract_api_token(value):
     if isinstance(value, dict):
         return str(value.get("key") or value.get("token") or "").strip()
@@ -78,7 +92,7 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
     password = str(config.get("developer_password", "")).strip()
     player_tag = str(config.get("player_tag", "")).strip()
     existing_token = _extract_api_token(config.get("api_token", ""))
-    refresh_signature = (str(file_path), email, password, player_tag)
+    refresh_signature = _api_refresh_signature(file_path, config)
 
     if (
             not force
@@ -104,9 +118,21 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
     public_ip_service = str(config.get("public_ip_service", "https://api.ipify.org")).strip()
     public_ip = get_public_ip(public_ip_service)
 
-    session = requests.Session()
-    _developer_api_post(session, "login", {"email": email, "password": password}, timeout)
-    account = _developer_api_post(session, "account/load", {}, timeout)
+    last_session_error = None
+    for attempt in range(2):
+        session = requests.Session()
+        _developer_api_post(session, "login", {"email": email, "password": password}, timeout)
+        try:
+            account = _developer_api_post(session, "account/load", {}, timeout)
+            break
+        except RuntimeError as e:
+            last_session_error = e
+            if attempt == 0 and _is_developer_session_not_found(e):
+                time.sleep(0.5)
+                continue
+            raise
+    else:
+        raise last_session_error
     developer = account.get("developer", {})
     scopes = developer.get("allowedScopes") or ["brawlstars"]
 
@@ -283,15 +309,30 @@ def fetch_brawl_stars_player(api_token, player_tag, timeout=15):
     raise RuntimeError(f"Brawl Stars API error {response.status_code}: {reason}")
 
 
+def _use_existing_api_token_after_refresh_failure(config, file_path, error):
+    global _brawl_stars_api_refresh_done, _brawl_stars_api_refresh_signature
+    if not _extract_api_token(config.get("api_token", "")):
+        raise error
+    _brawl_stars_api_refresh_done = True
+    _brawl_stars_api_refresh_signature = _api_refresh_signature(file_path, config)
+    print(f"Brawl Stars API auto-refresh failed ({error}); using existing api_token.")
+    return config
+
+
 def load_brawl_stars_api_config(file_path="cfg/brawl_stars_api.toml", force_refresh=False):
     try:
         clear_toml_cache(file_path)
         config = load_toml_as_dict(file_path)
         config = dict(config)
         config["player_tag"] = get_config_player_tag(config)
-        if force_refresh:
-            return refresh_brawl_stars_api_token_if_enabled(config, file_path, force=True)
-        return refresh_brawl_stars_api_token_if_enabled(config, file_path)
+        try:
+            if force_refresh:
+                return refresh_brawl_stars_api_token_if_enabled(config, file_path, force=True)
+            return refresh_brawl_stars_api_token_if_enabled(config, file_path)
+        except Exception as e:
+            if force_refresh:
+                raise
+            return _use_existing_api_token_after_refresh_failure(config, file_path, e)
     except toml.TomlDecodeError:
         pass
 
@@ -346,9 +387,14 @@ def load_brawl_stars_api_config(file_path="cfg/brawl_stars_api.toml", force_refr
         if match:
             config[key] = match.group(1).lower() == "true"
 
-    if force_refresh:
-        return refresh_brawl_stars_api_token_if_enabled(config, file_path, force=True)
-    return refresh_brawl_stars_api_token_if_enabled(config, file_path)
+    try:
+        if force_refresh:
+            return refresh_brawl_stars_api_token_if_enabled(config, file_path, force=True)
+        return refresh_brawl_stars_api_token_if_enabled(config, file_path)
+    except Exception as e:
+        if force_refresh:
+            raise
+        return _use_existing_api_token_after_refresh_failure(config, file_path, e)
 
 
 def find_template_center(main_img, template, threshold=0.8):
