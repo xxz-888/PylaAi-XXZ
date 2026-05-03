@@ -96,6 +96,8 @@ def pyla_main(data):
             self.state = None
             self.lobby_seen_since_match = False
             self.match_launch_pending = False
+            self.pending_lobby_since = None
+            self.pending_lobby_notice = 0.0
             self.last_ignored_prestige_state_time = 0.0
             general_config = load_toml_as_dict("cfg/general_config.toml")
             self.max_ips = parse_max_ips(general_config.get('max_ips', 0))
@@ -131,6 +133,12 @@ def pyla_main(data):
             self.last_global_freeze_sample = None
             self.lobby_start_retry_interval = float(time_thresholds.get("lobby_start_retry", 8.0))
             self.lobby_stuck_restart_seconds = float(time_thresholds.get("lobby_stuck_restart", 120.0))
+            self.lobby_after_match_confirm_seconds = float(
+                time_thresholds.get("lobby_after_match_confirm_seconds", 3.0)
+            )
+            self.lobby_after_match_detection_quiet_seconds = float(
+                time_thresholds.get("lobby_after_match_detection_quiet_seconds", 3.0)
+            )
             self.lobby_entered_at = None
             self.last_lobby_start_press = 0.0
             self.last_stale_feed_recovery = 0.0
@@ -479,8 +487,35 @@ def pyla_main(data):
                 lobby_seen_since_match=self.lobby_seen_since_match,
                 match_launch_pending=self.match_launch_pending,
             )
+            now = time.time()
+            if detected_state != "lobby":
+                self.pending_lobby_since = None
+
+            if state == "lobby" and previous_state == "match":
+                if self.pending_lobby_since is None:
+                    self.pending_lobby_since = now
+                    self.pending_lobby_notice = 0.0
+                recent_detection_age = min(
+                    now - self.Play.time_since_detections.get("player", 0),
+                    now - self.Play.time_since_detections.get("enemy", 0),
+                )
+                pending_for = now - self.pending_lobby_since
+                if (
+                        recent_detection_age < self.lobby_after_match_detection_quiet_seconds
+                        or pending_for < self.lobby_after_match_confirm_seconds
+                ):
+                    if now - self.pending_lobby_notice >= 5.0:
+                        print(
+                            "Ignoring lobby detection until it is stable after match "
+                            f"({pending_for:.1f}/{self.lobby_after_match_confirm_seconds:.1f}s, "
+                            f"detection quiet {recent_detection_age:.1f}/"
+                            f"{self.lobby_after_match_detection_quiet_seconds:.1f}s)."
+                        )
+                        self.pending_lobby_notice = now
+                    return "match"
+                self.pending_lobby_since = None
+
             if detected_state in OUT_OF_MATCH_REWARD_STATES and state != detected_state:
-                now = time.time()
                 if now - self.last_ignored_prestige_state_time >= 5.0:
                     print(f"Ignoring {detected_state} detection until lobby is confirmed after match.")
                     self.last_ignored_prestige_state_time = now

@@ -237,6 +237,47 @@ class SuperUsageTests(unittest.TestCase):
         self.assertFalse(play.refresh_ready_abilities_called)
         self.assertFalse(play.used_abilities)
 
+    def test_enemy_pressure_fallback_moves_when_near_enemy_and_movement_empty(self):
+        play = Play.__new__(Play)
+        play.enemy_pressure_move_range_multiplier = 1.15
+        play._strafe_started_at = 0.0
+        play._strafe_side = 1
+        play.strafe_interval = 1.0
+        play._strafe_current_interval = 0.0
+        play.window_controller = FakeWindow()
+        play.get_player_pos = lambda player: (100, 100)
+        play.get_enemy_pos = lambda enemy: (180, 100)
+        play.is_enemy_hittable = lambda *args, **kwargs: True
+        play.get_brawler_range = lambda brawler: (120, 240, 240)
+        play.find_best_angle = lambda player_pos, desired, walls: desired
+
+        movement = play.enemy_pressure_movement_fallback(
+            "",
+            {"player": ["player"], "enemy": ["enemy"], "wall": []},
+            "shelly",
+            current_time=10.0,
+        )
+
+        self.assertIsInstance(movement, float)
+
+    def test_enemy_pressure_fallback_leaves_empty_movement_when_enemy_far(self):
+        play = Play.__new__(Play)
+        play.enemy_pressure_move_range_multiplier = 1.15
+        play.window_controller = FakeWindow()
+        play.get_player_pos = lambda player: (100, 100)
+        play.get_enemy_pos = lambda enemy: (600, 100)
+        play.is_enemy_hittable = lambda *args, **kwargs: True
+        play.get_brawler_range = lambda brawler: (120, 240, 240)
+
+        movement = play.enemy_pressure_movement_fallback(
+            "",
+            {"player": ["player"], "enemy": ["enemy"], "wall": []},
+            "shelly",
+            current_time=10.0,
+        )
+
+        self.assertEqual(movement, "")
+
 
 if __name__ == "__main__":
     unittest.main()

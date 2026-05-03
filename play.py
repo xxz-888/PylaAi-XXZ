@@ -98,6 +98,7 @@ class Movement:
         self.strafe_blend = float(bot_config.get("strafe_blend", 0.35))
         self._strafe_started_at = 0.0
         self._strafe_side = 1
+        self.enemy_pressure_move_range_multiplier = float(bot_config.get("enemy_pressure_move_range_multiplier", 1.15))
         self.lead_shots_enabled = str(bot_config.get("lead_shots", "yes")).lower() in ("yes", "true", "1")
         self.aimed_attacks_enabled = str(bot_config.get("aimed_attacks", "no")).lower() in ("yes", "true", "1")
         self.projectile_speed_px_s = float(bot_config.get("projectile_speed_px_s", 900.0))
@@ -1588,6 +1589,8 @@ class Play(Movement):
         else:
             movement = self.get_movement(player_data=data['player'][0], enemy_data=data['enemy'], walls=data['wall'], brawler=brawler)
 
+        movement = self.enemy_pressure_movement_fallback(movement, data, brawler, current_time)
+
         current_time = time.time()
         if current_time - self.time_since_movement > self.minimum_movement_delay:
             if isinstance(movement, float):
@@ -1610,6 +1613,40 @@ class Play(Movement):
             self.do_movement(movement)
             self.time_since_movement = time.time()
         return movement
+
+    def enemy_pressure_movement_fallback(self, movement, data, brawler, current_time):
+        if isinstance(movement, float):
+            return movement
+        if isinstance(movement, str) and movement.strip():
+            return movement
+        if not data or not data.get("player") or not data.get("enemy"):
+            return movement
+
+        player_pos = self.get_player_pos(data["player"][0])
+        walls = data.get("wall") or []
+        enemy_coords, enemy_distance = self.find_closest_enemy(data["enemy"], player_pos, walls, "attack")
+        if enemy_coords is None or enemy_distance is None:
+            return movement
+
+        safe_range, attack_range, _ = self.get_brawler_range(brawler)
+        pressure_range = max(safe_range, attack_range) * self.enemy_pressure_move_range_multiplier
+        if enemy_distance > pressure_range:
+            return movement
+
+        toward_angle = self.angle_from_direction(
+            enemy_coords[0] - player_pos[0],
+            enemy_coords[1] - player_pos[1],
+        )
+        if enemy_distance <= safe_range:
+            desired = self.blend_angles(
+                self.angle_opposite(toward_angle),
+                self.get_strafe_angle(toward_angle, current_time, enemy_distance, safe_range),
+                0.35,
+            )
+        else:
+            desired = self.get_strafe_angle(toward_angle, current_time, enemy_distance, safe_range)
+
+        return self.find_best_angle(player_pos, desired, walls)
 
     def release_held_attack_for_super(self):
         if self.time_since_holding_attack is None:
