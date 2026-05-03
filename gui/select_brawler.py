@@ -151,8 +151,9 @@ class SelectBrawler:
         self.farm_type = value
 
     def start_bot(self):
-        self.data_setter(self.brawlers_data)
+        brawlers_data = list(self.brawlers_data)
         self.close_app()
+        self.data_setter(brawlers_data)
 
     def close_app(self):
         for after_id in (self._filter_after_id, self._image_render_after_id):
