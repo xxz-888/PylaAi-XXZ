@@ -144,6 +144,42 @@ def download_file(url: str, destination: Path, label: str) -> Path:
     return destination
 
 
+def split_toml_value_and_comment(raw_value: str) -> tuple[str, str]:
+    in_single_quote = False
+    in_double_quote = False
+    escaped = False
+
+    for index, char in enumerate(raw_value):
+        if escaped:
+            escaped = False
+            continue
+        if in_double_quote and char == "\\":
+            escaped = True
+            continue
+        if char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            continue
+        if char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            continue
+        if char == "#" and not in_single_quote and not in_double_quote:
+            return raw_value[:index].rstrip(), raw_value[index:]
+    return raw_value.rstrip(), ""
+
+
+def clean_preserved_toml_value(key: str, value: str) -> str:
+    if key != "player_tag":
+        return value
+    stripped = value.strip()
+    if len(stripped) < 2 or stripped[0] not in ('"', "'") or stripped[-1] != stripped[0]:
+        return value
+    inner = stripped[1:-1]
+    placeholder = "#YOURTAG"
+    if inner.upper().endswith(placeholder) and inner.upper() != placeholder:
+        return f"{stripped[0]}{inner[:-len(placeholder)]}{stripped[0]}"
+    return value
+
+
 def parse_simple_toml(text: str) -> dict:
     values = {}
     for line in text.splitlines():
@@ -152,9 +188,9 @@ def parse_simple_toml(text: str) -> dict:
             continue
         key, raw_value = stripped.split("=", 1)
         key = key.strip()
-        raw_value = raw_value.strip()
+        raw_value = split_toml_value_and_comment(raw_value.strip())[0].strip()
         if key:
-            values[key] = raw_value
+            values[key] = clean_preserved_toml_value(key, raw_value)
     return values
 
 
@@ -163,16 +199,18 @@ def merge_toml_text(new_text: str, old_text: str) -> str:
     new_values = parse_simple_toml(new_text)
     merged_lines = []
     used_keys = set()
-    key_pattern = re.compile(r"^(\s*)([A-Za-z0-9_\-]+)(\s*=\s*)(.*?)(\s*(?:#.*)?)$")
+    key_pattern = re.compile(r"^(\s*)([A-Za-z0-9_\-]+)(\s*=\s*)(.*)$")
 
     for line in new_text.splitlines():
         match = key_pattern.match(line)
         if not match:
             merged_lines.append(line)
             continue
-        prefix, key, equals, new_value, suffix = match.groups()
+        prefix, key, equals, new_value = match.groups()
+        _, suffix = split_toml_value_and_comment(new_value)
         if key in old_values:
-            merged_lines.append(f"{prefix}{key}{equals}{old_values[key]}{suffix}")
+            separator = " " if suffix and not suffix.startswith(" ") else ""
+            merged_lines.append(f"{prefix}{key}{equals}{old_values[key]}{separator}{suffix}")
             used_keys.add(key)
         else:
             merged_lines.append(line)

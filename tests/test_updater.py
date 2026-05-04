@@ -80,6 +80,32 @@ class UpdaterTest(unittest.TestCase):
         self.assertIn("new_key = true", merged)
         self.assertIn('old_key = "kept"', merged)
 
+    def test_toml_merge_does_not_append_placeholder_tag_suffix(self):
+        merged = merge_toml_text(
+            'player_tag = "#YOURTAG"\ntimeout_seconds = 15\n',
+            'player_tag = "#GRR010Y1"\n',
+        )
+
+        self.assertIn('player_tag = "#GRR010Y1"', merged)
+        self.assertNotIn("#GRR010Y1#YOURTAG", merged)
+
+    def test_toml_merge_repairs_existing_placeholder_tag_suffix(self):
+        merged = merge_toml_text(
+            'player_tag = "#YOURTAG"\ntimeout_seconds = 15\n',
+            'player_tag = "#GRR010Y1#YOURTAG"\n',
+        )
+
+        self.assertIn('player_tag = "#GRR010Y1"', merged)
+        self.assertNotIn("#GRR010Y1#YOURTAG", merged)
+
+    def test_toml_merge_preserves_real_inline_comment(self):
+        merged = merge_toml_text(
+            'player_tag = "#YOURTAG" # Brawl Stars player tag\n',
+            'player_tag = "#GRR010Y1"\n',
+        )
+
+        self.assertIn('player_tag = "#GRR010Y1" # Brawl Stars player tag', merged)
+
     def test_update_info_marker_round_trips_latest_sha(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)

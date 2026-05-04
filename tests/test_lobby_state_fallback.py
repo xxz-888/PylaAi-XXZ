@@ -5,8 +5,10 @@ import numpy as np
 
 from state_finder import (
     get_in_game_state,
+    get_matchmaking_exit_button_center,
     get_starr_nova_got_it_button_center,
     get_team_invite_reject_button_center,
+    is_in_match_making,
     is_lobby_currency_bar_visible,
     is_lobby_hud_visible,
     is_lobby_quests_button_visible,
@@ -66,6 +68,25 @@ class LobbyStateFallbackTests(unittest.TestCase):
         image[850:1010, 745:1175] = green_bgr
         image[900:960, 855:1070] = (250, 250, 250)
         image[942:972, 855:1070] = (25, 25, 25)
+
+    @staticmethod
+    def draw_matchmaking_screen(image):
+        red_bg = cv2.cvtColor(
+            np.full((1, 1, 3), (3, 155, 140), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        red_button = cv2.cvtColor(
+            np.full((1, 1, 3), (2, 220, 230), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        image[:] = red_bg
+        image[0:840, :] = red_bg
+        for x in range(0, 1920, 220):
+            cv2.line(image, (x, 0), (x + 520, 840), (12, 12, 35), 10)
+        image[120:210, 720:1190] = (245, 245, 245)
+        image[935:1045, 1625:1890] = red_button
+        image[960:1018, 1710:1845] = (250, 250, 250)
+        image[1000:1030, 1710:1845] = (20, 20, 20)
 
     def test_detects_lobby_by_large_yellow_play_button(self):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -168,6 +189,28 @@ class LobbyStateFallbackTests(unittest.TestCase):
         image[900:960, 855:1070] = (250, 250, 250)
 
         self.assertFalse(is_starr_nova_info_screen(image))
+
+    def test_matchmaking_screen_is_own_state(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.draw_matchmaking_screen(image)
+
+        center = get_matchmaking_exit_button_center(image)
+
+        self.assertIsNotNone(center)
+        self.assertTrue(is_in_match_making(image))
+        self.assertEqual(get_in_game_state(image), "match_making")
+
+    def test_matchmaking_rejects_plain_red_button(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        red_button = cv2.cvtColor(
+            np.full((1, 1, 3), (2, 220, 230), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        image[935:1045, 1625:1890] = red_button
+        image[960:1018, 1710:1845] = (250, 250, 250)
+
+        self.assertFalse(is_in_match_making(image))
+        self.assertNotEqual(get_in_game_state(image), "match_making")
 
 
 if __name__ == "__main__":

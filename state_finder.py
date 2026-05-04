@@ -117,6 +117,7 @@ def get_in_game_state(image):
     if is_in_shop(image): return "shop"
     if is_in_offer_popup(image): return "popup"
     if is_in_team_invite_popup(image): return "popup"
+    if is_in_match_making(image): return "match_making"
     if is_in_lobby(image): return "lobby"
     if is_in_brawler_selection(image):
         return "brawler_selection"
@@ -147,6 +148,88 @@ def is_in_brawler_selection(image) -> bool:
 
 def is_in_offer_popup(image) -> bool:
     return is_template_in_region(image, states_path + 'close_popup.png', region_data["close_popup"])
+
+
+def get_matchmaking_exit_button_center(image):
+    current_height, current_width = image.shape[:2]
+    width_ratio = current_width / orig_screen_width
+    height_ratio = current_height / orig_screen_height
+
+    # Matchmaking has a large red Exit button fixed in the lower-right corner.
+    # We detect the button directly instead of relying on player detections, so
+    # no-detection proceed can stay short without exiting matchmaking loops.
+    region = [1570, 840, 330, 210]
+    x = int(region[0] * width_ratio)
+    y = int(region[1] * height_ratio)
+    w = int(region[2] * width_ratio)
+    h = int(region[3] * height_ratio)
+    crop = image[y:y + h, x:x + w]
+    if crop.size == 0:
+        return None
+
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    red_low = cv2.inRange(
+        hsv,
+        np.array((0, 90, 90), dtype=np.uint8),
+        np.array((10, 255, 255), dtype=np.uint8),
+    )
+    red_high = cv2.inRange(
+        hsv,
+        np.array((170, 90, 90), dtype=np.uint8),
+        np.array((179, 255, 255), dtype=np.uint8),
+    )
+    red_mask = cv2.bitwise_or(red_low, red_high)
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, np.ones((7, 7), dtype=np.uint8))
+    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    min_area = max(600, crop.shape[0] * crop.shape[1] * 0.18)
+    candidates = []
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        bx, by, bw, bh = cv2.boundingRect(contour)
+        if area < min_area or bw < w * 0.45 or bh < h * 0.30:
+            continue
+        button_part = crop[by:by + bh, bx:bx + bw]
+        if button_part.size == 0:
+            continue
+        white_ratio = mask_ratio(button_part, (0, 0, 165), (179, 95, 255))
+        dark_ratio = mask_ratio(button_part, (0, 0, 0), (179, 255, 75))
+        if white_ratio < 0.015 or dark_ratio < 0.025:
+            continue
+        candidates.append((area, bx, by, bw, bh))
+
+    if not candidates:
+        return None
+    _, bx, by, bw, bh = max(candidates, key=lambda item: item[0])
+    return int(x + bx + bw / 2), int(y + by + bh / 2)
+
+
+def is_matchmaking_tip_visible(image):
+    top = crop_scaled_region(image, [650, 95, 620, 140])
+    if top.size == 0:
+        return False
+    white_ratio = mask_ratio(top, (0, 0, 170), (179, 90, 255))
+    dark_ratio = mask_ratio(top, (0, 0, 0), (179, 255, 80))
+    return white_ratio > 0.035 and dark_ratio > 0.025
+
+
+def is_matchmaking_background_visible(image):
+    center = crop_scaled_region(image, [0, 0, 1920, 840])
+    if center.size == 0:
+        return False
+    red_ratio = mask_ratio(center, (0, 60, 65), (12, 255, 255)) + mask_ratio(center, (170, 60, 65), (179, 255, 255))
+    dark_ratio = mask_ratio(center, (0, 0, 0), (179, 255, 90))
+    return red_ratio > 0.12 and dark_ratio > 0.035
+
+
+def is_in_match_making(image) -> bool:
+    return (
+        get_matchmaking_exit_button_center(image) is not None
+        and is_matchmaking_tip_visible(image)
+        and is_matchmaking_background_visible(image)
+    )
 
 
 def get_team_invite_reject_button_center(image, image_is_rgb=False):

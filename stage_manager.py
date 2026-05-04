@@ -72,6 +72,7 @@ class StageManager:
             'brawler_selection': self.quit_shop,
             'popup': self.close_pop_up,
             'match': lambda: 0,
+            'match_making': lambda: self.window_controller.keys_up(list("wasd")),
             'end_draw': self.end_game,
             'end_victory': self.end_game,
             'end_defeat': self.end_game,
