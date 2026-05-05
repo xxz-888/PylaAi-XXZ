@@ -651,8 +651,37 @@ def get_star_drop_type(image):
                 return "angelic"
             if image_filename == "demonic_star_drop.png":
                 return "demonic"
+            if not has_standard_star_drop_screen_context(image):
+                return None
             return "standard"
     return None
+
+
+def has_standard_star_drop_screen_context(image):
+    background = crop_scaled_region(image, [340, 75, 1240, 830])
+    if background.size == 0:
+        return False
+
+    hsv = cv2.cvtColor(background, cv2.COLOR_BGR2HSV)
+    green_mask = cv2.inRange(
+        hsv,
+        np.array((38, 55, 55), dtype=np.uint8),
+        np.array((92, 255, 255), dtype=np.uint8),
+    )
+    green_ratio = cv2.countNonZero(green_mask) / max(1, background.shape[0] * background.shape[1])
+    if green_ratio < 0.16:
+        return False
+
+    top_title = crop_scaled_region(image, [690, 20, 540, 155])
+    if top_title.size == 0:
+        return False
+    title_hsv = cv2.cvtColor(top_title, cv2.COLOR_BGR2HSV)
+    bright_text = cv2.inRange(
+        title_hsv,
+        np.array((35, 0, 120), dtype=np.uint8),
+        np.array((95, 255, 255), dtype=np.uint8),
+    )
+    return cv2.countNonZero(bright_text) > int(2200 * (image.shape[1] / orig_screen_width) * (image.shape[0] / orig_screen_height))
 
 
 def is_in_daily_wins_drop(image):

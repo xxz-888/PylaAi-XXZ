@@ -100,6 +100,16 @@ class StateTransitionGuardTests(unittest.TestCase):
             "star_drop",
         )
 
+    def test_star_drop_is_blocked_after_lobby_start_pressed(self):
+        self.assertEqual(
+            normalize_detected_state(
+                "star_drop",
+                previous_state="lobby",
+                match_launch_pending=True,
+            ),
+            "lobby",
+        )
+
     def test_lobby_after_match_depends_on_stable_lobby_state_not_vision_quietness(self):
         self.assertFalse(should_accept_lobby_after_match(2.9, 3.0))
         self.assertTrue(should_accept_lobby_after_match(3.0, 3.0))

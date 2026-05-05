@@ -88,16 +88,10 @@ def choose_release_download(release: dict) -> tuple[str, str]:
 
 
 def latest_download_url() -> tuple[str, str]:
-    try:
-        release = request_json(LATEST_RELEASE_API)
-        return choose_release_download(release)
-    except Exception as exc:
-        if "404" in str(exc):
-            print("No GitHub release update was found yet.")
-        else:
-            print("Could not check GitHub releases right now.")
-        print("Checking the latest main version instead.")
-        return MAIN_BRANCH_ZIP, "main branch zip"
+    # Hotfixes are pushed to main first. Using a GitHub release asset here can
+    # install old code while the updater records the newest main SHA, making
+    # future updater runs incorrectly say "You're on the latest version!".
+    return MAIN_BRANCH_ZIP, "main branch zip"
 
 
 def latest_main_sha() -> str | None:

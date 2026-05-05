@@ -5,6 +5,8 @@ from pathlib import Path
 from tools.updater import (
     backup_preserved_files,
     copy_update_files,
+    latest_download_url,
+    MAIN_BRANCH_ZIP,
     merge_toml_text,
     read_local_update_sha,
     restore_preserved_files,
@@ -13,6 +15,12 @@ from tools.updater import (
 
 
 class UpdaterTest(unittest.TestCase):
+    def test_updater_downloads_main_branch_not_possibly_stale_release(self):
+        url, label = latest_download_url()
+
+        self.assertEqual(url, MAIN_BRANCH_ZIP)
+        self.assertEqual(label, "main branch zip")
+
     def test_copy_update_preserves_user_api_config_and_skips_updater_exe(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

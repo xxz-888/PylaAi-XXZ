@@ -80,7 +80,7 @@ def normalize_detected_state(
         match_result_seen=False,
 ):
     if detected_state in LOBBY_ONLY_REWARD_STATES:
-        if previous_state == "lobby":
+        if previous_state == "lobby" and not match_launch_pending:
             return detected_state
         return previous_state or "match"
     if detected_state in OUT_OF_MATCH_REWARD_STATES and not (
