@@ -15,6 +15,7 @@ for file in os.listdir(star_drops_path):
     if "star_drop" in file:
         images_with_star_drop.append(file)
 images_with_star_drop.sort(key=lambda name: 0 if name in ("angelic_star_drop.png", "demonic_star_drop.png") else 1)
+STAR_DROP_TEMPLATE_THRESHOLD = 0.97
 
 end_results_path = r"./images/end_results/"
 
@@ -639,10 +640,13 @@ def is_in_star_drop(image):
 
 
 def get_star_drop_type(image):
-    if is_in_daily_wins_drop(image):
-        return "standard"
     for image_filename in images_with_star_drop:
-        if is_template_in_region(image, star_drops_path + image_filename, region_data['star_drop']):
+        if is_template_in_region(
+                image,
+                star_drops_path + image_filename,
+                region_data['star_drop'],
+                threshold=STAR_DROP_TEMPLATE_THRESHOLD,
+        ):
             if image_filename == "angelic_star_drop.png":
                 return "angelic"
             if image_filename == "demonic_star_drop.png":

@@ -75,6 +75,8 @@ class SelectBrawler:
         self._filter_after_id = None
         self._image_render_after_id = None
         self._current_filter_text = None
+        self._closing = False
+        self._closed = False
         api_trophies = self.get_api_trophies_by_brawler()
         if api_trophies:
             self.brawlers = [brawler for brawler in self.brawlers if brawler in api_trophies]
@@ -137,6 +139,8 @@ class SelectBrawler:
         self.app.mainloop()
 
     def queue_image_filter_update(self):
+        if self._closing:
+            return
         if self._filter_after_id is not None:
             try:
                 self.app.after_cancel(self._filter_after_id)
@@ -151,11 +155,19 @@ class SelectBrawler:
         self.farm_type = value
 
     def start_bot(self):
+        if self._closing:
+            return
         brawlers_data = list(self.brawlers_data)
-        self.close_app()
+        self._closing = True
+        self._cancel_queued_callbacks()
+        self._hide_window()
         self.data_setter(brawlers_data)
+        try:
+            self.app.quit()
+        except Exception:
+            pass
 
-    def close_app(self):
+    def _cancel_queued_callbacks(self):
         for after_id in (self._filter_after_id, self._image_render_after_id):
             if after_id is None:
                 continue
@@ -165,14 +177,28 @@ class SelectBrawler:
                 pass
         self._filter_after_id = None
         self._image_render_after_id = None
+
+    def _hide_window(self):
         try:
-            for after_id in self.app.tk.call("after", "info"):
-                try:
-                    self.app.after_cancel(after_id)
-                except Exception:
-                    pass
+            self.app.withdraw()
         except Exception:
             pass
+        try:
+            self.app.update_idletasks()
+        except Exception:
+            pass
+        try:
+            self.app.update()
+        except Exception:
+            pass
+
+    def close_app(self):
+        if self._closed:
+            return
+        self._closing = True
+        self._cancel_queued_callbacks()
+        self._hide_window()
+
         try:
             self.app.quit()
         except Exception:
@@ -181,6 +207,7 @@ class SelectBrawler:
             self.app.destroy()
         except Exception:
             pass
+        self._closed = True
 
     def load_brawler_config(self):
         # open file select dialog to select a json file
@@ -478,11 +505,14 @@ class SelectBrawler:
             ).grid(row=row, column=col, padx=int(10 * scale_factor), pady=int(8 * scale_factor))
 
     def push_all(self, target_trophies=1000):
+        if self._closing:
+            return
         target_trophies = int(target_trophies)
         hidden_for_start = False
         try:
             self.app.withdraw()
             self.app.update_idletasks()
+            self.app.update()
             hidden_for_start = True
 
             data = self.get_push_all_data(target_trophies)
@@ -764,6 +794,8 @@ class SelectBrawler:
 
 
     def update_images(self, filter_text):
+        if self._closing:
+            return
         filter_text = (filter_text or "").strip().lower()
         if filter_text == self._current_filter_text:
             return
@@ -785,6 +817,8 @@ class SelectBrawler:
         ]
 
         def render_batch(start_index=0):
+            if self._closing:
+                return
             for index in range(start_index, min(start_index + 16, len(matches))):
                 brawler, img_tk = matches[index]
                 row_num = index // 10

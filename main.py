@@ -60,6 +60,7 @@ def parse_max_ips(value):
 
 
 OUT_OF_MATCH_REWARD_STATES = {"prestige_reward", "trophy_reward"}
+LOBBY_ONLY_REWARD_STATES = {"star_drop"}
 MATCH_RESULT_STATES = {
     "end_victory",
     "end_defeat",
@@ -78,6 +79,10 @@ def normalize_detected_state(
         match_launch_pending=False,
         match_result_seen=False,
 ):
+    if detected_state in LOBBY_ONLY_REWARD_STATES:
+        if previous_state == "lobby":
+            return detected_state
+        return previous_state or "match"
     if detected_state in OUT_OF_MATCH_REWARD_STATES and not (
             lobby_seen_since_match or match_result_seen
     ):
@@ -117,6 +122,7 @@ def pyla_main(data):
             self.post_match_reward_until = 0.0
             self.reward_chain_seen = False
             self.last_ignored_prestige_state_time = 0.0
+            self.last_ignored_star_drop_state_time = 0.0
             general_config = load_toml_as_dict("cfg/general_config.toml")
             self.max_ips = parse_max_ips(general_config.get('max_ips', 0))
             print(
@@ -564,6 +570,10 @@ def pyla_main(data):
                 if now - self.last_ignored_prestige_state_time >= 5.0:
                     print(f"Ignoring {detected_state} detection until a match result or lobby is confirmed.")
                     self.last_ignored_prestige_state_time = now
+            if detected_state in LOBBY_ONLY_REWARD_STATES and state != detected_state:
+                if now - self.last_ignored_star_drop_state_time >= 5.0:
+                    print("Ignoring star_drop detection because the previous stable state was not lobby.")
+                    self.last_ignored_star_drop_state_time = now
 
             if state == "match":
                 self.lobby_seen_since_match = False
@@ -575,7 +585,7 @@ def pyla_main(data):
                 self.lobby_seen_since_match = True
                 self.match_launch_pending = False
                 self.reward_chain_seen = False
-            elif state in OUT_OF_MATCH_REWARD_STATES:
+            elif state in OUT_OF_MATCH_REWARD_STATES or state in LOBBY_ONLY_REWARD_STATES:
                 self.reward_chain_seen = True
             return state
 

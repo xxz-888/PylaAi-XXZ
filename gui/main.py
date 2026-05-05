@@ -1,6 +1,7 @@
 import os
 import sys
 import tkinter as tk
+import time
 
 import customtkinter as ctk
 import utils
@@ -79,7 +80,13 @@ class App:
             else:
                 self.hub_menu(pyla_version, get_latest_version())
             utils.clear_toml_cache()
-            self.select_brawler(self.set_data, self.brawlers)
+            selector = self.select_brawler(self.set_data, self.brawlers)
+            if hasattr(selector, "close_app"):
+                try:
+                    selector.close_app()
+                except Exception:
+                    pass
             if self.brawler_data:
                 utils.save_brawler_data(self.brawler_data)
+                time.sleep(0.05)
                 self.pyla_main(self.brawler_data)
