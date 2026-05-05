@@ -60,6 +60,15 @@ class PoisonGasAvoidanceTests(unittest.TestCase):
         self.assertTrue(play.is_there_poison_gas("up", [135, 135, 165, 165]))
         self.assertFalse(play.is_there_poison_gas("down", [135, 135, 165, 165]))
 
+    def test_playstyle_poison_gas_api_detects_player_inside_gas(self):
+        play = self.make_play()
+        frame = np.zeros((300, 300, 3), dtype=np.uint8)
+        frame[138:162, 138:162] = self.fog_rgb()
+        play.current_frame = frame
+
+        self.assertTrue(play.is_there_poison_gas("up", [135, 135, 165, 165]))
+        self.assertTrue(play.is_there_poison_gas("down", [135, 135, 165, 165]))
+
 
 if __name__ == "__main__":
     unittest.main()

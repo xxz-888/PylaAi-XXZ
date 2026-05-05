@@ -964,6 +964,14 @@ class Play(Movement):
         band = max(30, int(r * 0.45))
         min_pixels = max(12, int(self.fog_min_pixels_in_radius * 0.45))
         direction = str(direction).lower()
+        try:
+            player_half_width = max(8, abs(float(player_data[2]) - float(player_data[0])) * 0.55)
+            player_half_height = max(8, abs(float(player_data[3]) - float(player_data[1])) * 0.55)
+        except (TypeError, ValueError, IndexError):
+            player_half_width = player_half_height = max(12, band * 0.35)
+        player_area = (np.abs(dx) <= player_half_width) & (np.abs(dy) <= player_half_height)
+        if int(player_area.sum()) >= min_pixels:
+            return True
         checks = {
             "up": (dy < 0) & (dy >= -r) & (np.abs(dx) <= band),
             "down": (dy > 0) & (dy <= r) & (np.abs(dx) <= band),
@@ -2041,8 +2049,9 @@ class Play(Movement):
                 if current_state != "match":
                     self.time_since_last_proceeding = current_time
                 else:
-                    print("haven't detected the player in a while proceeding")
-                    self.window_controller.press_key("Q")
+                    # Blind proceed taps can open lobby/event panels when state
+                    # detection is between screens. Rewards and post-match
+                    # screens are handled by explicit state/template handlers.
                     self.time_since_last_proceeding = time.time()
             return
         self.time_since_last_proceeding = time.time()

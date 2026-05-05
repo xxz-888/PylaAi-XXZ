@@ -75,18 +75,14 @@ class LobbyStateFallbackTests(unittest.TestCase):
             np.full((1, 1, 3), (3, 155, 140), dtype=np.uint8),
             cv2.COLOR_HSV2BGR,
         )[0, 0]
-        red_button = cv2.cvtColor(
-            np.full((1, 1, 3), (2, 220, 230), dtype=np.uint8),
-            cv2.COLOR_HSV2BGR,
-        )[0, 0]
         image[:] = red_bg
         image[0:840, :] = red_bg
         for x in range(0, 1920, 220):
             cv2.line(image, (x, 0), (x + 520, 840), (12, 12, 35), 10)
         image[120:210, 720:1190] = (245, 245, 245)
-        image[935:1045, 1625:1890] = red_button
-        image[960:1018, 1710:1845] = (250, 250, 250)
-        image[1000:1030, 1710:1845] = (20, 20, 20)
+        exit_template = cv2.imread("images/states/exit_match_making.png")
+        th, tw = exit_template.shape[:2]
+        image[954:954 + th, 1636:1636 + tw] = exit_template
 
     def test_detects_lobby_by_large_yellow_play_button(self):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)

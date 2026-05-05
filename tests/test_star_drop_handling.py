@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import cv2
 
-from state_finder import get_star_drop_type
+from state_finder import get_in_game_state, get_star_drop_type
 
 
 class StarDropHandlingTests(unittest.TestCase):
@@ -16,6 +16,7 @@ class StarDropHandlingTests(unittest.TestCase):
         image[30:100, 20:430] = (245, 245, 245)
 
         self.assertEqual(get_star_drop_type(image), "standard")
+        self.assertEqual(get_in_game_state(image), "star_drop")
 
 
 if __name__ == "__main__":

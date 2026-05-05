@@ -13,6 +13,7 @@ from state_finder import (
     is_in_prestige_reward,
     get_prestige_next_button_center,
     get_team_invite_reject_button_center,
+    get_star_drop_type,
 )
 from trophy_observer import TrophyObserver
 from utils import find_template_center, load_toml_as_dict, async_notify_user, \
@@ -82,7 +83,7 @@ class StageManager:
             'end_3rd': self.end_game,
             'end_4th': self.end_game,
             'lobby': self.start_game,
-            'star_drop': lambda: 0,
+            'star_drop': self.handle_star_drop,
             'prestige_reward': self.handle_prestige_reward,
             'trophy_reward': lambda: self.window_controller.press_key("Q")
         }
@@ -493,6 +494,29 @@ class StageManager:
             current_state = get_state(screenshot)
             attempts += 1
         return screenshot if current_state == "lobby" else None
+
+    def handle_star_drop(self):
+        screenshot = self.window_controller.screenshot()
+        screenshot_bgr = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+        drop_type = get_star_drop_type(screenshot_bgr)
+        if drop_type is None:
+            return
+
+        print(f"{drop_type.title()} star drop detected; opening by template.")
+        self.window_controller.keys_up(list("wasd"))
+        current_height, current_width = screenshot.shape[:2]
+        width_ratio = current_width / 1920
+        height_ratio = current_height / 1080
+        x = int(965 * width_ratio)
+        y = int(525 * height_ratio)
+        if drop_type in ("angelic", "demonic"):
+            for _ in range(3):
+                self.window_controller.click(x, y, delay=0.45)
+                time.sleep(0.2)
+        else:
+            for _ in range(5):
+                self.window_controller.click(x, y, delay=0.04)
+                time.sleep(0.08)
 
     def handle_prestige_reward(self):
         screenshot = self.window_controller.screenshot()

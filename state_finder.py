@@ -125,9 +125,8 @@ def get_in_game_state(image):
     if is_in_brawl_pass(image) or is_in_star_road(image):
         return "shop"
 
-    # Star drops are intentionally not surfaced as a runtime state right now.
-    # The normal post-match/no-detection flow dismisses them, and treating them
-    # as a state caused false positives during matches.
+    if is_in_star_drop(image):
+        return "star_drop"
 
     if is_in_trophy_reward(image):
         return "trophy_reward"
@@ -151,14 +150,24 @@ def is_in_offer_popup(image) -> bool:
 
 
 def get_matchmaking_exit_button_center(image):
+    region = region_data.get("exit_match_making", [1600, 925, 295, 135])
+    template_path = states_path + "exit_match_making.png"
+    if os.path.exists(template_path) and not is_template_in_region(
+            image,
+            template_path,
+            region,
+            threshold=0.82,
+    ):
+        return None
+
     current_height, current_width = image.shape[:2]
     width_ratio = current_width / orig_screen_width
     height_ratio = current_height / orig_screen_height
 
     # Matchmaking has a large red Exit button fixed in the lower-right corner.
-    # We detect the button directly instead of relying on player detections, so
-    # no-detection proceed can stay short without exiting matchmaking loops.
-    region = [1570, 840, 330, 210]
+    # Require the exact Exit template first, then use the color/shape pass only
+    # to return a scaled click center. In-match red UI can otherwise resemble a
+    # cancel button closely enough to cause false match_making states.
     x = int(region[0] * width_ratio)
     y = int(region[1] * height_ratio)
     w = int(region[2] * width_ratio)
@@ -370,6 +379,15 @@ def is_starr_nova_info_screen(image):
     button_center = get_starr_nova_got_it_button_center(image)
     if button_center is None:
         return False
+    starr_nova_region = region_data.get("starr_nova_event")
+    if starr_nova_region and os.path.exists(states_path + "starr_nova_event.png"):
+        if is_template_in_region(
+                image,
+                states_path + "starr_nova_event.png",
+                starr_nova_region,
+                threshold=0.78,
+        ):
+            return True
 
     # The screen is mostly grayscale manga panels, with cyan headings and the
     # bright event logo. These anchors make the green button check specific to
