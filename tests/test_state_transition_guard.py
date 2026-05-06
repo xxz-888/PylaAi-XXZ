@@ -5,7 +5,7 @@ from main import normalize_detected_state, should_accept_lobby_after_match
 
 class StateTransitionGuardTests(unittest.TestCase):
     def test_out_of_match_rewards_are_ignored_until_result_or_lobby_was_seen(self):
-        for state in ("prestige_reward", "trophy_reward"):
+        for state in ("prestige_reward", "trophy_reward", "reward_unlock"):
             with self.subTest(state=state):
                 self.assertEqual(
                     normalize_detected_state(
@@ -16,6 +16,22 @@ class StateTransitionGuardTests(unittest.TestCase):
                     ),
                     "match",
                 )
+
+    def test_reward_unlock_is_allowed_after_trophy_reward(self):
+        self.assertEqual(
+            normalize_detected_state(
+                "reward_unlock",
+                previous_state="trophy_reward",
+            ),
+            "reward_unlock",
+        )
+        self.assertEqual(
+            normalize_detected_state(
+                "reward_unlock",
+                previous_state="reward_unlock",
+            ),
+            "reward_unlock",
+        )
 
     def test_out_of_match_rewards_are_allowed_after_result_screen(self):
         for state in ("prestige_reward", "trophy_reward"):

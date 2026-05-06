@@ -32,7 +32,7 @@ class TrophyObserver:
         # Source: official showdown trio trophy table.
         # Last row is a fallback for trophies above the documented range.
         self.showdown_trio_ranges = [
-            (49,    (12, 5, 5, 5)),
+            (49,    (11, 5, 5, 5)),
             (99,    (11, 5, 4, -1)),
             (199,   (11, 5, 3, -1)),
             (299,   (11, 5, 2, -1)),

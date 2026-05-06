@@ -85,7 +85,8 @@ class StageManager:
             'lobby': self.start_game,
             'star_drop': self.handle_star_drop,
             'prestige_reward': self.handle_prestige_reward,
-            'trophy_reward': lambda: self.window_controller.press_key("Q")
+            'trophy_reward': lambda: self.window_controller.press_key("Q"),
+            'reward_unlock': lambda: self.window_controller.press_key("Q"),
         }
 
     def send_webhook_notification(self, event_type, screenshot=None, details=None):

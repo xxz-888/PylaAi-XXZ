@@ -132,6 +132,9 @@ def get_in_game_state(image):
     if is_in_trophy_reward(image):
         return "trophy_reward"
 
+    if is_in_reward_unlock(image):
+        return "reward_unlock"
+
     if is_in_prestige_reward(image):
         return "prestige_reward"
 
@@ -493,6 +496,41 @@ def is_in_end_of_a_match(image):
 
 def is_in_trophy_reward(image):
     return is_template_in_region(image, states_path + 'trophies_screen.png', region_data["trophies_screen"])
+
+
+def is_in_reward_unlock(image):
+    # Generic "YOU GOT / Unlocked" reward page shown after trophy-road rewards.
+    # It is intentionally guarded by main.py so this broad color detector is
+    # only actionable inside the post-trophy reward chain.
+    full = crop_scaled_region(image, [0, 0, 1920, 1080])
+    if full.size == 0:
+        return False
+
+    hsv = cv2.cvtColor(full, cv2.COLOR_BGR2HSV)
+    blue_ratio = mask_ratio(full, (92, 80, 85), (118, 255, 255))
+    if blue_ratio < 0.45:
+        return False
+
+    top = crop_scaled_region(image, [720, 120, 520, 150])
+    bottom = crop_scaled_region(image, [700, 610, 560, 150])
+    card = crop_scaled_region(image, [720, 260, 520, 330])
+    if top.size == 0 or bottom.size == 0 or card.size == 0:
+        return False
+
+    top_white = mask_ratio(top, (0, 0, 170), (179, 80, 255))
+    top_black = mask_ratio(top, (0, 0, 0), (179, 255, 65))
+    bottom_yellow = mask_ratio(bottom, (18, 85, 110), (42, 255, 255))
+    bottom_black = mask_ratio(bottom, (0, 0, 0), (179, 255, 70))
+    card_dark = mask_ratio(card, (0, 0, 0), (179, 255, 80))
+    card_light = mask_ratio(card, (85, 25, 115), (110, 150, 255))
+    return (
+            top_white > 0.08
+            and top_black > 0.04
+            and bottom_yellow > 0.04
+            and bottom_black > 0.03
+            and card_dark > 0.10
+            and card_light > 0.08
+    )
 
 
 def count_hsv_in_region(image, region, lower, upper):

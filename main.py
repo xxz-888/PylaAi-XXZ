@@ -60,6 +60,7 @@ def parse_max_ips(value):
 
 
 OUT_OF_MATCH_REWARD_STATES = {"prestige_reward", "trophy_reward"}
+TROPHY_REWARD_FOLLOWUP_STATES = {"reward_unlock"}
 LOBBY_ONLY_REWARD_STATES = {"star_drop"}
 MATCH_RESULT_STATES = {
     "end_victory",
@@ -81,6 +82,13 @@ def normalize_detected_state(
 ):
     if detected_state in LOBBY_ONLY_REWARD_STATES:
         if previous_state == "lobby" and not match_launch_pending:
+            return detected_state
+        return previous_state or "match"
+    if detected_state in TROPHY_REWARD_FOLLOWUP_STATES:
+        if (
+                previous_state in {"trophy_reward", "reward_unlock"}
+                or (previous_state != "lobby" and match_result_seen)
+        ):
             return detected_state
         return previous_state or "match"
     if detected_state in OUT_OF_MATCH_REWARD_STATES and not (
@@ -585,7 +593,11 @@ def pyla_main(data):
                 self.lobby_seen_since_match = True
                 self.match_launch_pending = False
                 self.reward_chain_seen = False
-            elif state in OUT_OF_MATCH_REWARD_STATES or state in LOBBY_ONLY_REWARD_STATES:
+            elif (
+                    state in OUT_OF_MATCH_REWARD_STATES
+                    or state in LOBBY_ONLY_REWARD_STATES
+                    or state in TROPHY_REWARD_FOLLOWUP_STATES
+            ):
                 self.reward_chain_seen = True
             return state
 
