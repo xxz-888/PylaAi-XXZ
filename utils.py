@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import io
 import os
 import re
@@ -243,8 +243,19 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
 class DefaultEasyOCR:
     def __init__(self):
         import easyocr
+        from gpu_support import primary_vendor, resolve_easyocr_gpu
 
-        self.reader = easyocr.Reader(['en'], verbose=False, gpu=False)
+        use_gpu = resolve_easyocr_gpu()
+        if use_gpu and primary_vendor() == "amd":
+            print("EasyOCR: attempting torch-directml-backed GPU when available.")
+        try:
+            self.reader = easyocr.Reader(['en'], verbose=False, gpu=use_gpu)
+        except Exception as exc:
+            if use_gpu:
+                print(f"EasyOCR GPU init failed ({exc}); falling back to CPU.")
+                self.reader = easyocr.Reader(['en'], verbose=False, gpu=False)
+            else:
+                raise
 
     def readtext(self, image_input):
         return self.reader.readtext(image_input)

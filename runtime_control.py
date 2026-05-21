@@ -1,13 +1,20 @@
-﻿import os
+import os
 import subprocess
 import sys
 import time
 import ctypes
 from pathlib import Path
 
+from runtime_metrics import delete_metrics, read_metrics
+from utils import load_toml_as_dict
+
 
 RUNNING = "running"
 PAUSED = "paused"
+STOP_REQUESTED = "stop_requested"
+
+SPARKLINE_WIDTH = 200
+SPARKLINE_HEIGHT = 32
 
 
 def write_state(path, state):
@@ -22,10 +29,66 @@ def read_state(path):
         return RUNNING
 
 
+def is_stop_requested(path):
+    return read_state(path) == STOP_REQUESTED
+
+
+def request_stop(path):
+    write_state(path, STOP_REQUESTED)
+    return STOP_REQUESTED
+
+
+def pause_menu_graph_enabled():
+    general = load_toml_as_dict("cfg/general_config.toml")
+    return str(general.get("pause_menu_ips_graph", "no")).strip().lower() in (
+        "yes",
+        "true",
+        "1",
+        "on",
+    )
+
+
+def draw_ips_sparkline(canvas, samples, color, width=SPARKLINE_WIDTH, height=SPARKLINE_HEIGHT):
+    canvas.delete("all")
+    mid_y = height / 2
+    if not samples:
+        canvas.create_line(0, mid_y, width, mid_y, fill=color, width=1)
+        return
+    if len(samples) == 1:
+        y = mid_y
+        canvas.create_line(0, y, width, y, fill=color, width=1.5)
+        return
+
+    min_val = min(samples)
+    max_val = max(samples)
+    span = max_val - min_val
+    if span < 0.5:
+        span = 0.5
+        mid = (min_val + max_val) / 2
+        min_val = mid - span / 2
+        max_val = mid + span / 2
+    padding = span * 0.08
+    min_val -= padding
+    max_val += padding
+    span = max_val - min_val
+
+    points = []
+    last_index = len(samples) - 1
+    for index, value in enumerate(samples):
+        x = (index / last_index) * width
+        ratio = (value - min_val) / span
+        y = height - (ratio * (height - 4)) - 2
+        points.extend((x, y))
+
+    if len(points) >= 4:
+        canvas.create_line(*points, fill=color, width=1.5, smooth=True)
+
+
 class RuntimeControlWindow:
-    def __init__(self):
+    def __init__(self, metrics_path=None):
         state_dir = Path("logs")
         self.state_path = state_dir / f"runtime_control_{os.getpid()}.state"
+        self.metrics_path = metrics_path
         self.process = None
         write_state(self.state_path, RUNNING)
 
@@ -33,8 +96,11 @@ class RuntimeControlWindow:
         if self.process and self.process.poll() is None:
             return
         script_path = Path(__file__).resolve()
+        cmd = [sys.executable, str(script_path), "--window", str(self.state_path)]
+        if self.metrics_path is not None:
+            cmd.append(str(Path(self.metrics_path).resolve()))
         self.process = subprocess.Popen(
-            [sys.executable, str(script_path), "--window", str(self.state_path)],
+            cmd,
             cwd=str(script_path.parent),
             close_fds=True,
         )
@@ -47,6 +113,8 @@ class RuntimeControlWindow:
 
     def close(self):
         write_state(self.state_path, RUNNING)
+        if self.metrics_path is not None:
+            delete_metrics(self.metrics_path)
         if self.process and self.process.poll() is None:
             self.process.terminate()
             try:
@@ -79,15 +147,18 @@ def process_is_alive(pid):
         ctypes.windll.kernel32.CloseHandle(handle)
 
 
-def run_window(state_path):
+def run_window(state_path, metrics_path=None):
     import tkinter as tk
     import customtkinter as ctk
 
     ctk.set_appearance_mode("dark")
 
+    graph_enabled = pause_menu_graph_enabled() and metrics_path is not None
+    window_height = 248 if graph_enabled else 206
+
     root = ctk.CTk()
     root.title("PylaAi-XXZ Control")
-    root.geometry("310x206")
+    root.geometry(f"310x{window_height}")
     root.resizable(False, False)
     root.attributes("-topmost", True)
     root.overrideredirect(True)
@@ -100,6 +171,7 @@ def run_window(state_path):
 
     status_var = tk.StringVar(value="Running")
     button_var = tk.StringVar(value="Pause Bot")
+    ips_var = tk.StringVar(value="IPS --")
 
     def start_move(event):
         root._pyla_drag_offset = (event.x_root - root.winfo_x(), event.y_root - root.winfo_y())
@@ -171,7 +243,47 @@ def run_window(state_path):
         text_color="#30d158",
         font=("Segoe UI", 18, "bold"),
     )
-    status_label.pack(pady=(0, 10))
+    status_label.pack(pady=(0, 6 if graph_enabled else 10))
+
+    sparkline_canvas = None
+    if graph_enabled:
+        graph_row = ctk.CTkFrame(panel, fg_color="transparent")
+        graph_row.pack(fill="x", padx=10, pady=(0, 8))
+
+        ctk.CTkLabel(
+            graph_row,
+            textvariable=ips_var,
+            text_color="#b8b8b8",
+            font=("Segoe UI", 11, "bold"),
+            anchor="w",
+        ).pack(side="left")
+
+        sparkline_canvas = tk.Canvas(
+            graph_row,
+            width=SPARKLINE_WIDTH,
+            height=SPARKLINE_HEIGHT,
+            bg="#181818",
+            highlightthickness=0,
+            bd=0,
+        )
+        sparkline_canvas.pack(side="right")
+        draw_ips_sparkline(sparkline_canvas, [], "#30d158")
+
+    def graph_color(paused):
+        return "#ff9f0a" if paused else "#30d158"
+
+    def update_metrics(paused):
+        if not graph_enabled or sparkline_canvas is None:
+            return
+        metrics = read_metrics(Path(metrics_path).resolve()) if metrics_path else None
+        color = graph_color(paused)
+        if metrics is None:
+            ips_var.set("IPS --")
+            draw_ips_sparkline(sparkline_canvas, [], color)
+            return
+        ips_var.set(f"IPS {metrics['ips']:.1f}")
+        history = metrics.get("history") or []
+        draw_ips_sparkline(sparkline_canvas, history, color)
 
     def refresh():
         if owner_pid and not process_is_alive(owner_pid):
@@ -186,6 +298,7 @@ def run_window(state_path):
             hover_color="#ffb23a" if paused else "#2a2a2a",
             border_color="#8f610e" if paused else "#333333",
         )
+        update_metrics(paused)
 
     def root_exists():
         try:
@@ -227,4 +340,5 @@ def run_window(state_path):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--window":
-        run_window(sys.argv[2])
+        metrics_arg = sys.argv[3] if len(sys.argv) >= 4 else None
+        run_window(sys.argv[2], metrics_arg)
