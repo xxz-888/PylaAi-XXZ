@@ -1,4 +1,4 @@
-﻿import customtkinter as ctk
+import customtkinter as ctk
 import asyncio
 import threading
 import webbrowser
@@ -149,6 +149,9 @@ class Hub:
         self.general_config.setdefault("emulator_port", 5555)
         self.general_config.setdefault("terminal_logging", "no")
         self.general_config.setdefault("visual_debug", "no")
+        self.general_config.setdefault("advanced_visuals", "no")
+        self.general_config.setdefault("pause_menu_ips_graph", "no")
+        self.general_config.setdefault("pause_menu_graph_samples", 45)
         self.general_config.setdefault("visual_debug_scale", 0.6)
         self.general_config.setdefault("visual_debug_max_fps", 30)
         self.general_config.setdefault("visual_debug_max_boxes", 120)
@@ -835,7 +838,7 @@ class Hub:
         lbl_gpu = ctk.CTkLabel(container, text="Inference device:", font=("Arial", S(18)))
         lbl_gpu.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
 
-        gpu_values = ["auto", "directml", "cuda", "openvino", "cpu"]
+        gpu_values = ["auto", "directml", "amd", "cuda", "openvino", "cpu"]
         gpu_var = tk.StringVar(value=self.general_config["cpu_or_gpu"])
 
         def on_gpu_change(choice):
@@ -862,7 +865,7 @@ class Hub:
             config_key="directml_device_id",
             convert_func=str,
             use_general_config=True,
-            tooltip_text="DirectML adapter index. Keep auto unless DirectML uses the wrong GPU; try 0 or 1 on laptops with two GPUs."
+            tooltip_text="DirectML adapter index. AMD Radeon: use directml or amd. Keep auto unless DirectML uses the wrong GPU; try 0 or 1 on dual-GPU laptops."
         )
 
         lbl_long_press = ctk.CTkLabel(container, text="Longpress star_drop:", font=("Arial", S(18)))
@@ -978,6 +981,68 @@ class Hub:
             "Shows a live OpenCV debug window with detected player, teammate, enemy, wall, fog, and range overlays. Takes effect on next bot start."
         )
         row_idx += 1
+
+        lbl_advanced_visuals = ctk.CTkLabel(container, text="Advanced Visuals:", font=("Arial", S(18)))
+        lbl_advanced_visuals.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
+        advanced_visuals_var = tk.BooleanVar(
+            value=(str(self.general_config.get("advanced_visuals", "no")).lower() in ["yes", "true"])
+        )
+
+        def toggle_advanced_visuals():
+            self.general_config["advanced_visuals"] = "yes" if advanced_visuals_var.get() else "no"
+            save_dict_as_toml(self.general_config, self.general_config_path)
+
+        advanced_visuals_cb = ctk.CTkCheckBox(
+            container,
+            text="",
+            variable=advanced_visuals_var,
+            command=toggle_advanced_visuals,
+            fg_color=THEME["accent"],
+            hover_color=THEME["accent_hover"],
+            width=S(30),
+            height=S(30)
+        )
+        advanced_visuals_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
+        self.attach_tooltip(
+            advanced_visuals_cb,
+            "Requires Debug Screen. Adds a joystick direction radar (red=wall, green=clear), movement arrow, and lines to followed teammates and hittable enemies."
+        )
+        row_idx += 1
+
+        lbl_pause_graph = ctk.CTkLabel(container, text="Pause Menu IPS Graph:", font=("Arial", S(18)))
+        lbl_pause_graph.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))
+        pause_graph_var = tk.BooleanVar(
+            value=(str(self.general_config.get("pause_menu_ips_graph", "no")).lower() in ["yes", "true"])
+        )
+
+        def toggle_pause_graph():
+            self.general_config["pause_menu_ips_graph"] = "yes" if pause_graph_var.get() else "no"
+            save_dict_as_toml(self.general_config, self.general_config_path)
+
+        pause_graph_cb = ctk.CTkCheckBox(
+            container,
+            text="",
+            variable=pause_graph_var,
+            command=toggle_pause_graph,
+            fg_color=THEME["accent"],
+            hover_color=THEME["accent_hover"],
+            width=S(30),
+            height=S(30)
+        )
+        pause_graph_cb.grid(row=row_idx, column=1, sticky="w", padx=S(20), pady=S(10))
+        self.attach_tooltip(
+            pause_graph_cb,
+            "Shows a small IPS graph on the pause control window. Takes effect on next bot start."
+        )
+        row_idx += 1
+
+        create_labeled_entry(
+            label_text="Pause Graph Samples:",
+            config_key="pause_menu_graph_samples",
+            convert_func=int,
+            use_general_config=True,
+            tooltip_text="How many recent IPS points to show in the pause menu graph (30-120)."
+        )
 
         lbl_showdown_style = ctk.CTkLabel(container, text="Trio Movement Style:", font=("Arial", S(18)))
         lbl_showdown_style.grid(row=row_idx, column=0, sticky="e", padx=S(20), pady=S(10))

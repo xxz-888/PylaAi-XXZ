@@ -1,5 +1,6 @@
-﻿import argparse
+import argparse
 import shutil
+import sys
 from pathlib import Path
 
 
@@ -13,7 +14,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=80)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", default="-1", help="Ultralytics batch value. -1 auto-selects.")
-    parser.add_argument("--device", default="0", help="0 for GPU, cpu for CPU.")
+    parser.add_argument("--device", default="0", help="0/CUDA GPU, cpu for CPU, or auto on AMD via torch-directml.")
     parser.add_argument("--name", default="pylaai_vision")
     parser.add_argument("--project", default="runs/vision_train")
     parser.add_argument("--replace", action="store_true", help="Replace models/mainInGameModel.onnx after export.")
@@ -30,13 +31,21 @@ def main():
         raise SystemExit("Missing ultralytics. Run setup.exe or python setup.py install first.") from exc
 
     batch = int(args.batch) if str(args.batch).lstrip("-").isdigit() else args.batch
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from gpu_support import resolve_ultralytics_device
+
+    device = resolve_ultralytics_device(args.device)
+    print(f"Ultralytics training device: {device}")
+
     model = YOLO(args.base)
     results = model.train(
         data=str(data),
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=batch,
-        device=args.device,
+        device=device,
         name=args.name,
         project=str(ROOT / args.project),
     )

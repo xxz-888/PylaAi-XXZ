@@ -1,0 +1,92 @@
+{
+    "params": {
+        "safe_range_multiplier": 0.85,
+        "strafe_blend": 0.65,
+        "strafe_interval": 1.0,
+        "attack_cooldown": 0.12
+    },
+    "history": [
+        {
+            "bucket": "draw",
+            "time": 1778622661.787775
+        },
+        {
+            "bucket": "loss",
+            "time": 1778622732.967543
+        },
+        {
+            "bucket": "win",
+            "time": 1778622866.092872
+        },
+        {
+            "bucket": "win",
+            "time": 1778623065.8700333
+        },
+        {
+            "bucket": "loss",
+            "time": 1778623180.8658829
+        },
+        {
+            "bucket": "loss",
+            "time": 1778623238.409805
+        },
+        {
+            "bucket": "win",
+            "time": 1778623326.4088578
+        },
+        {
+            "bucket": "win",
+            "time": 1778623459.5407872
+        },
+        {
+            "bucket": "loss",
+            "time": 1778623579.0498543
+        },
+        {
+            "bucket": "win",
+            "time": 1778623733.2640522
+        },
+        {
+            "bucket": "loss",
+            "time": 1778623879.7858653
+        },
+        {
+            "bucket": "win",
+            "time": 1778624058.3638048
+        },
+        {
+            "bucket": "loss",
+            "time": 1778624115.931534
+        },
+        {
+            "bucket": "draw",
+            "time": 1778624247.5424285
+        },
+        {
+            "bucket": "loss",
+            "time": 1778624365.73715
+        },
+        {
+            "bucket": "win",
+            "time": 1778624506.4617386
+        },
+        {
+            "bucket": "loss",
+            "time": 1778624606.2665043
+        },
+        {
+            "bucket": "loss",
+            "time": 1778624660.806441
+        },
+        {
+            "bucket": "win",
+            "time": 1778624780.3821826
+        },
+        {
+            "bucket": "loss",
+            "time": 1778624869.6666114
+        }
+    ],
+    "total_matches": 2682,
+    "last_win_rate": 0.444
+}

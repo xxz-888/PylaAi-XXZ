@@ -154,7 +154,7 @@ class QmlHubStateTests(unittest.TestCase):
         self.assertIn("implicitWidth: Math.max(66", qml)
         self.assertIn("anchors.leftMargin: 190", qml)
         self.assertIn("Layout.fillWidth: true", qml)
-        self.assertIn('model: ["auto", "directml", "cuda", "openvino", "cpu"]', qml)
+        self.assertIn('model: ["auto", "directml", "amd", "cuda", "openvino", "cpu"]', qml)
 
     def test_qml_config_inputs_have_visible_row_height(self):
         qml = Path("gui/qml/PylaHub.qml").read_text(encoding="utf-8")

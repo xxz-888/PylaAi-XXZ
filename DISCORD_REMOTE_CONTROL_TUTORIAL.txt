@@ -31,6 +31,18 @@ Resumes PylaAi-XXZ if it was paused.
 /stop
 Pauses PylaAi-XXZ movement and actions.
 
+/pause
+Same as /stop. Pauses movement and actions.
+
+/stop_all
+Stops the bot completely and exits the main loop.
+Use this when you want to shut PylaAi-XXZ down remotely, not just pause it.
+
+/push
+Starts pushing a specific brawler.
+Example: /push brawler:shelly target:500
+The bot resumes if paused, updates the active brawler, and reselects that brawler in the lobby when possible.
+
 /status
 Shows whether the bot is running or paused.
 It also shows useful live details like current detected state, IPS, feed FPS, emulator, ADB device, brawler, and target.
@@ -63,6 +75,12 @@ Examples:
 /press q
 /press e
 /press back
+
+
+Command responses
+-----------------
+Every slash command now acknowledges within 3 seconds and then sends a confirmation follow-up.
+If Discord previously showed "The application did not respond", restart PylaAi-XXZ after updating so the new command handlers are loaded.
 
 
 Setup step 1: create the Discord bot

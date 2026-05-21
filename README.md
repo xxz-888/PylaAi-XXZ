@@ -1,4 +1,4 @@
-﻿# PylaAi-XXZ
+# PylaAi-XXZ
 
 This fork focuses on **Showdown** (trio). Other game modes still run off the upstream logic, but development effort and tuning here go into making Showdown play well end-to-end.
 
@@ -65,12 +65,13 @@ Recovery features :
 - If Brawl Stars closes or another app is in front, the bot can relaunch Brawl Stars.
 - If the Brawl Stars Idle Disconnect / Reload dialog appears, the bot presses Reload.
 - If the scrcpy video feed freezes, the bot restarts the scrcpy feed instead of repeatedly restarting Brawl Stars.
-- While the bot is running, a small `PylaAi-XXZ Control` window lets you pause and resume movement safely.
+- While the bot is running, a small `PylaAi-XXZ Control` window lets you pause and resume movement safely. Enable **Pause menu IPS graph** in hub settings to show a compact IPS sparkline on that window (takes effect on next bot start).
 
 Discord webhook and remote control :
 - Open `cfg/discord_config.toml`.
 - Webhook notifications only need `webhook_url`.
-- Discord `/start`, `/stop`, and `/status` need a Discord bot token, because normal webhooks cannot receive commands.
+- Discord slash commands (`/start`, `/stop`, `/pause`, `/stop_all`, `/push`, `/status`, etc.) need a Discord bot token, because normal webhooks cannot receive commands.
+- `/stop` and `/pause` pause the bot; `/stop_all` exits the bot completely; `/push brawler [target]` switches brawler and reselects it in the lobby.
 - Create a bot token:
   1. Go to https://discord.com/developers/applications
   2. Click `New Application`.
@@ -113,6 +114,14 @@ Telegram notifications and remote control :
 Performance troubleshooting :
 - Run `python tools/performance_check.py`.
 - If it says `CPUExecutionProvider`, run `setup.exe` again or set `cfg/general_config.toml` `cpu_or_gpu = "directml"`.
+
+AMD / Radeon (Windows DirectML) :
+- `setup.exe` and `python setup.py --pyla-install` auto-install `onnxruntime-directml` on AMD systems and save `cpu_or_gpu = "directml"`.
+- Verify GPU inference: `python tools/performance_check.py` should report `DmlExecutionProvider`.
+- Repair runtime: `python tools/fix_gpu_runtime.py directml` (or `amd`, which is the same).
+- Dual-GPU laptop (Radeon + Intel): set `directml_device_id` in `cfg/general_config.toml` to the Radeon adapter index if DirectML is slow.
+- In the hub, choose **directml**, **amd**, or **auto** for inference. Do not use **cuda** on AMD; it is NVIDIA-only.
+- Wall/vision training on AMD: install `torch-directml` (done automatically by setup on AMD), then run `python tools/train_wall_model.py` (falls back to CPU if DirectML training is unavailable).
 - If the bot shows `1-2 IPS` while Python CPU usage is low, check the `scrcpy frame FPS` line from `tools/performance_check.py`. Low frame FPS means the emulator/ADB feed is slow, not the AI model.
 - On laptops with two GPUs, set Windows Graphics settings for `python.exe` and the emulator to High performance.
 - If DirectML is active but still very slow, try `directml_device_id = "1"` in `cfg/general_config.toml`, then restart the bot.
@@ -120,6 +129,7 @@ Performance troubleshooting :
 - For LDPlayer or MuMu, select the matching emulator in the hub or set `current_emulator = "LDPlayer"` / `"MuMu"` in `cfg/general_config.toml`, use 1920x1080 landscape, set emulator FPS to 60, and disable any low-FPS/eco mode.
 - Keep some free RAM. If memory is above about 85%, close Discord/browser/other games before running the bot.
 - Enable `Debug Screen` in Additional Settings to open a live vision overlay while the bot runs. It shows player, teammate, enemy, wall, fog, and range overlays.
+- Enable `Advanced Visuals` (requires Debug Screen) to see decision-making overlays: a joystick direction radar (red=wall, green=clear), the commanded movement arrow, and lines to followed teammates and hittable enemies.
 
 Wall model improvement :
 - The active wall/bush model is `models/tileDetector.onnx`.

@@ -51,65 +51,13 @@ def install_base_requirements():
     ])
 
 
-def detect_graphics_cards():
-    cards = []
-    try:
-        output = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader,nounits"],
-            encoding="utf-8",
-            stderr=subprocess.DEVNULL,
-        ).strip()
-        if output:
-            for line in output.splitlines():
-                name = line.strip()
-                if name:
-                    cards.append(("nvidia", name))
-    except Exception:
-        pass
-
-    try:
-        wmic = subprocess.check_output(
-            ["wmic", "path", "win32_VideoController", "get", "name"],
-            encoding="utf-8",
-            stderr=subprocess.DEVNULL,
-        )
-        for line in wmic.splitlines():
-            name = line.strip()
-            if not name or name.lower() == "name":
-                continue
-            lower = name.lower()
-            if "nvidia" in lower and not any(card[1] == name for card in cards):
-                cards.append(("nvidia", name))
-            elif "amd" in lower or "radeon" in lower:
-                cards.append(("amd", name))
-            elif "intel" in lower:
-                cards.append(("intel", name))
-    except Exception:
-        pass
-
-    if cards:
-        print("Detected graphics cards:")
-        for vendor, name in cards:
-            print(f"  - {vendor}: {name}")
-    else:
-        print("No dedicated GPU was detected; CPU fallback will still be tested.")
-    return cards
-
-
-def auto_candidate_variants(cards):
-    vendors = {vendor for vendor, _name in cards}
-    candidates = ["directml"]
-    if "nvidia" in vendors:
-        candidates.append("cuda")
-    candidates.append("cpu")
-    return candidates
-
-
-def detect_runtime_variant():
-    return auto_candidate_variants(detect_graphics_cards())[0]
-
-
 def install_variant(variant):
+    root = Path(__file__).resolve().parents[1]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from gpu_support import normalize_runtime_variant, primary_vendor
+
+    variant = normalize_runtime_variant(variant)
     package = {
         "directml": "onnxruntime-directml",
         "cuda": "onnxruntime-gpu",
@@ -129,6 +77,11 @@ def install_variant(variant):
             "--index-url",
             CUDA_TORCH_INDEX_URL,
         ])
+    elif variant == "directml" and primary_vendor() == "amd":
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "torch-directml"],
+            check=False,
+        )
     run([sys.executable, "-m", "pip", "install", "--upgrade", package])
 
 
@@ -157,15 +110,18 @@ def update_config(variant):
     root = Path(__file__).resolve().parents[1]
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
+    from gpu_support import apply_gpu_config, detect_graphics_cards
     from utils import load_toml_as_dict, save_dict_as_toml
 
     config_path = root / "cfg" / "general_config.toml"
     config = load_toml_as_dict(str(config_path))
-    config["cpu_or_gpu"] = variant
-    if variant == "directml":
-        config.setdefault("directml_device_id", "auto")
+    cards = detect_graphics_cards()
+    apply_gpu_config(config, variant, cards)
     save_dict_as_toml(config, str(config_path))
-    print(f"Updated {config_path}: cpu_or_gpu = {variant!r}")
+    print(
+        f"Updated {config_path}: cpu_or_gpu = {config['cpu_or_gpu']!r}, "
+        f"directml_device_id = {config.get('directml_device_id', 'auto')!r}"
+    )
 
 
 def benchmark_variant(variant, runs=12):
@@ -224,6 +180,12 @@ print({BENCHMARK_MARKER!r} + json.dumps({{
 
 
 def install_and_benchmark_variant(variant):
+    root = Path(__file__).resolve().parents[1]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from gpu_support import normalize_runtime_variant
+
+    variant = normalize_runtime_variant(variant)
     print()
     print("=" * 60)
     print(f"Testing runtime: {variant}")
@@ -244,6 +206,11 @@ def install_and_benchmark_variant(variant):
 
 
 def main():
+    root = Path(__file__).resolve().parents[1]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from gpu_support import auto_candidate_variants, describe_detected_gpus, detect_graphics_cards, normalize_runtime_variant
+
     parser = argparse.ArgumentParser(
         description="Repair PylaAi-XXZ dependencies, test available ONNX runtimes, and keep the fastest working one."
     )
@@ -251,17 +218,18 @@ def main():
         "variant",
         nargs="?",
         default="auto",
-        choices=["auto", "directml", "cuda", "cpu"],
+        choices=["auto", "directml", "amd", "cuda", "cpu"],
         help=(
             "Optional. auto detects the graphics card, tries stable GPU runtimes first, benchmarks them, "
-            "and keeps the fastest working runtime. Use cuda/directml/cpu to force one runtime."
+            "and keeps the fastest working runtime. AMD users should use directml or amd (not cuda)."
         ),
     )
     args = parser.parse_args()
 
     install_base_requirements()
     cards = detect_graphics_cards()
-    variants = auto_candidate_variants(cards) if args.variant == "auto" else [args.variant]
+    print(describe_detected_gpus(cards))
+    variants = auto_candidate_variants(cards) if args.variant == "auto" else [normalize_runtime_variant(args.variant)]
     print(f"Runtime test order: {', '.join(variants)}")
 
     results = []

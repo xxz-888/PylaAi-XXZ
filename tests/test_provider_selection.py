@@ -5,6 +5,7 @@ import numpy as np
 
 from detect import Detect, _build_providers, _fallback_providers_after_runtime_failure
 from utils import DefaultEasyOCR
+from gpu_support import resolve_easyocr_gpu
 
 
 class ProviderSelectionTests(unittest.TestCase):
@@ -15,6 +16,14 @@ class ProviderSelectionTests(unittest.TestCase):
     ])
     def test_auto_prefers_directml_before_cuda_when_available(self, *_):
         providers = _build_providers("auto")
+        self.assertEqual(providers[0], "DmlExecutionProvider")
+
+    @patch("detect.ort.get_available_providers", return_value=[
+        "DmlExecutionProvider",
+        "CPUExecutionProvider",
+    ])
+    def test_amd_alias_uses_directml(self, *_):
+        providers = _build_providers("amd")
         self.assertEqual(providers[0], "DmlExecutionProvider")
 
     @patch("detect.ort.get_available_providers", return_value=[
@@ -95,10 +104,24 @@ class ProviderSelectionTests(unittest.TestCase):
         self.assertEqual(detector.model.run.call_count, 2)
         detector._fallback_after_runtime_failure.assert_called_once()
 
+    @patch("gpu_support.resolve_easyocr_gpu", return_value=False)
     @patch("easyocr.Reader")
-    def test_easyocr_is_forced_to_cpu(self, mock_reader):
+    def test_easyocr_uses_cpu_when_gpu_unavailable(self, mock_reader, _):
         DefaultEasyOCR()
         self.assertFalse(mock_reader.call_args.kwargs["gpu"])
+
+    @patch("gpu_support.resolve_easyocr_gpu", return_value=True)
+    @patch("gpu_support.primary_vendor", return_value="amd")
+    @patch("easyocr.Reader")
+    def test_easyocr_attempts_gpu_when_amd_directml_available(self, mock_reader, *_):
+        DefaultEasyOCR()
+        self.assertTrue(mock_reader.call_args.kwargs["gpu"])
+
+    @patch("gpu_support.has_cuda_torch", return_value=False)
+    @patch("gpu_support.has_torch_directml", return_value=False)
+    @patch("gpu_support.primary_vendor", return_value="amd")
+    def test_resolve_easyocr_gpu_false_without_backends(self, *_):
+        self.assertFalse(resolve_easyocr_gpu())
 
 
 if __name__ == "__main__":

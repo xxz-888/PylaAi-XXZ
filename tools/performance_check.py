@@ -1,4 +1,4 @@
-﻿import platform
+import platform
 import sys
 import time
 from pathlib import Path
@@ -10,12 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from gpu_support import describe_detected_gpus, gpu_help_message, primary_vendor
 from utils import load_toml_as_dict
 
 
 def main():
     cfg = load_toml_as_dict(str(ROOT / "cfg" / "general_config.toml"))
     print("PylaAi-XXZ performance check")
+    print(describe_detected_gpus())
     print(f"Python: {platform.python_version()} {platform.architecture()[0]} ({sys.executable})")
     print(f"ONNX Runtime: {ort.__version__}")
     print(f"Available providers: {', '.join(ort.get_available_providers())}")
@@ -59,13 +61,23 @@ def main():
 
     if platform.architecture()[0] != "64bit":
         print("WARNING: Python is not 64-bit. Re-run setup.exe to install Python 3.11 64-bit.")
+    vendor = primary_vendor()
     if detector.device == "CPUExecutionProvider":
         print("WARNING: ONNX is running on CPU.")
-        print("- Stable GPU fix: py -3.11-64 tools\\fix_gpu_runtime.py directml")
-        print("- CUDA is advanced only: py -3.11-64 tools\\fix_gpu_runtime.py cuda")
+        print(gpu_help_message("missing_gpu_provider", vendor))
+        if vendor == "amd":
+            print("- AMD Radeon: py -3.11-64 tools\\fix_gpu_runtime.py directml")
+            print("- Dual-GPU laptop: set directml_device_id in cfg/general_config.toml to the Radeon adapter index.")
+        elif vendor == "nvidia":
+            print("- Stable GPU fix: py -3.11-64 tools\\fix_gpu_runtime.py directml")
+            print("- CUDA is advanced only: py -3.11-64 tools\\fix_gpu_runtime.py cuda")
+        else:
+            print("- Stable GPU fix: py -3.11-64 tools\\fix_gpu_runtime.py directml")
     if detector.device == "DmlExecutionProvider" and ips < 10:
         print("WARNING: DirectML is active but slow.")
-        print("- Try directml_device_id = \"1\" on dual-GPU laptops and restart the bot.")
+        print("- Try directml_device_id = \"0\" or \"1\" on dual-GPU laptops and restart the bot.")
+        if vendor == "amd":
+            print("- Set Windows Graphics -> High performance for python.exe and your emulator.")
 
     print("\nFrame-source check")
     print("Start your emulator, open Brawl Stars, and keep it visible. Measuring scrcpy frames for 10 seconds...")
