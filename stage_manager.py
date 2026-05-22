@@ -69,6 +69,7 @@ class StageManager:
         self.last_player_total_trophies = None
         self.stop_after_post_match_rewards = False
         self.completion_notification_sent = False
+        self.target_switch_prepared = False
         time_thresholds = load_toml_as_dict("./cfg/time_tresholds.toml")
         self.end_screen_dismiss_delay = float(time_thresholds.get("end_screen_dismiss_delay", 0.35))
         self.window_controller = window_controller
@@ -686,6 +687,8 @@ class StageManager:
                         print("Could not confirm the next brawler selection reached lobby; delaying match start.")
                         self.window_controller.keys_up(list("wasd"))
                         return
+                    self.target_switch_prepared = False
+                    self.push_all_needs_selection = False
             else:
                 print("Next brawler is in manual mode, waiting 10 seconds to let user switch.")
 
@@ -696,11 +699,23 @@ class StageManager:
                 print("Could not confirm the API-refreshed brawler selection reached lobby; delaying match start.")
                 self.window_controller.keys_up(list("wasd"))
                 return
+            self.target_switch_prepared = False
+            self.push_all_needs_selection = False
 
         # q btn is over the start btn
         self.window_controller.keys_up(list("wasd"))
         self.window_controller.press_key("Q")
         print("Pressed Q to start a match")
+
+    def prepare_target_switch_from_match_result(self, target, type_of_push):
+        if getattr(self, "target_switch_prepared", False):
+            return bool(self.brawlers_pick_data)
+        if not self._prepare_next_push_all_brawler(target, type_of_push):
+            return False
+        self.target_switch_prepared = True
+        self.push_all_needs_selection = True
+        return True
+
     def advance_to_next_brawler_after_prestige(self):
         if not self.brawlers_pick_data:
             return False
@@ -980,6 +995,22 @@ class StageManager:
                         if self.post_match_action == "play_again":
                             if self.restart_and_select_next_after_target(push_current_brawler_till, type_to_push):
                                 return
+                        elif self.prepare_target_switch_from_match_result(push_current_brawler_till, type_to_push):
+                            print("Push All target reached; queued next brawler selection for lobby.")
+                        else:
+                            print("Brawler reached required trophies/wins. No remaining brawlers are below the Push All target.")
+                            self.stop_after_post_match_rewards = True
+                            if not self.completion_notification_sent:
+                                screenshot = self.window_controller.screenshot()
+                                self.send_webhook_notification(
+                                    "completed",
+                                    screenshot,
+                                    self.current_target_details({
+                                        "result": found_game_result,
+                                        "target": push_current_brawler_till,
+                                    }),
+                                )
+                                self.completion_notification_sent = True
             
             # Keep pressing the dismiss key on every iteration until the
             # end-of-match screens give way. One press is rarely enough in

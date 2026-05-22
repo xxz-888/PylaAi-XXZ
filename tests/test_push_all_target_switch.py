@@ -15,6 +15,13 @@ class DummyTrophyObserver:
         self.changed_to = value
         self.current_trophies = value
 
+    def add_trophies(self, game_result, current_brawler):
+        self.current_trophies += 5
+        return True
+
+    def add_win(self, game_result):
+        self.current_wins += 1
+
 
 class DummyWindowController:
     def __init__(self):
@@ -80,6 +87,18 @@ class PushAllTargetSwitchTest(unittest.TestCase):
         manager.send_webhook_notification = lambda *args, **kwargs: None
         manager.push_all_needs_selection = False
         manager.stop_after_post_match_rewards = False
+        manager.target_switch_prepared = False
+        manager.completion_notification_sent = False
+        manager.post_match_action = "lobby"
+        manager.end_screen_dismiss_delay = 0
+        manager.active_end_result = None
+        manager.last_match_trophy_before = None
+        manager.last_match_trophy_after = None
+        manager.last_match_trophy_delta = 0
+        manager.last_match_crossed_1000 = False
+        manager.last_recorded_result = None
+        manager.last_recorded_result_time = 0.0
+        manager.time_since_last_stat_change = 0.0
         return manager
 
     @patch.object(StageManager, "refresh_push_all_trophies_from_api", return_value=False)
@@ -391,6 +410,48 @@ class PushAllTargetSwitchTest(unittest.TestCase):
         self.assertEqual(mock_fetch_player.call_count, 2)
         self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "first")
         self.assertEqual(manager.Lobby_automation.lowest_calls, 0)
+
+    @patch("stage_manager.save_brawler_data")
+    @patch("stage_manager.time.sleep", return_value=None)
+    @patch("stage_manager.get_state", side_effect=["end_1st", "lobby"])
+    def test_end_game_prepares_push_all_250_switch_before_lobby(
+            self,
+            _mock_get_state,
+            _mock_sleep,
+            _mock_save,
+    ):
+        manager = self.make_manager(250)
+        manager.brawlers_pick_data[0]["trophies"] = 245
+        manager.Trophy_observer = DummyTrophyObserver(245)
+        manager.dismiss_end_screen = lambda use_play_again=False: None
+
+        manager.end_game()
+
+        self.assertTrue(manager.target_switch_prepared)
+        self.assertTrue(manager.push_all_needs_selection)
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "second")
+        self.assertEqual(manager.Trophy_observer.current_trophies, 0)
+
+    @patch("stage_manager.save_brawler_data")
+    @patch("stage_manager.time.sleep", return_value=None)
+    @patch("stage_manager.get_state", side_effect=["end_1st", "lobby"])
+    def test_end_game_prepares_push_all_500_switch_before_lobby(
+            self,
+            _mock_get_state,
+            _mock_sleep,
+            _mock_save,
+    ):
+        manager = self.make_manager(500)
+        manager.brawlers_pick_data[0]["trophies"] = 495
+        manager.Trophy_observer = DummyTrophyObserver(495)
+        manager.dismiss_end_screen = lambda use_play_again=False: None
+
+        manager.end_game()
+
+        self.assertTrue(manager.target_switch_prepared)
+        self.assertTrue(manager.push_all_needs_selection)
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "second")
+        self.assertEqual(manager.Trophy_observer.current_trophies, 0)
 
 
 if __name__ == "__main__":
