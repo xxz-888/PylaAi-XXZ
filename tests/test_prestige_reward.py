@@ -8,6 +8,7 @@ import numpy as np
 from stage_manager import StageManager
 from state_finder import (
     get_prestige_next_button_center,
+    has_post_match_action_buttons,
     is_in_prestige_reward,
 )
 
@@ -123,6 +124,23 @@ class PrestigeRewardTests(unittest.TestCase):
         image[840:945, 1140:1420] = green
         image[865:900, 1260:1360] = (255, 255, 255)
 
+        self.assertFalse(is_in_prestige_reward(image))
+
+    def test_prestige_reward_detector_rejects_post_match_action_screen(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.draw_prestige_screen(image)
+        yellow = cv2.cvtColor(
+            np.full((1, 1, 3), (26, 220, 230), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        blue = cv2.cvtColor(
+            np.full((1, 1, 3), (108, 220, 230), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        image[850:1010, 760:1190] = yellow
+        image[850:1010, 1440:1840] = blue
+
+        self.assertTrue(has_post_match_action_buttons(image))
         self.assertFalse(is_in_prestige_reward(image))
 
     def test_prestige_reward_clicks_detected_next_button_advances_queue_and_selects_lowest(self):

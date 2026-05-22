@@ -163,6 +163,22 @@ class PostMatchActionTests(unittest.TestCase):
         self.assertEqual(manager.window_controller.presses, ["Q"])
         self.assertIn(list("wasd"), manager.window_controller.keys_released)
 
+    def test_post_match_action_screen_guard_detects_result_buttons(self):
+        manager = self.make_manager("play_again")
+        screenshot = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        yellow_bgr = cv2.cvtColor(
+            np.full((1, 1, 3), (26, 220, 230), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        blue_bgr = cv2.cvtColor(
+            np.full((1, 1, 3), (108, 220, 230), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+        screenshot[850:1010, 760:1190] = tuple(int(v) for v in yellow_bgr[::-1])
+        screenshot[850:1010, 1440:1840] = tuple(int(v) for v in blue_bgr[::-1])
+
+        self.assertTrue(manager.still_on_post_match_action_screen(screenshot))
+
     @patch("stage_manager.save_brawler_data")
     def test_target_completion_in_play_again_mode_restarts_and_selects_next(self, *_):
         manager = self.make_manager("play_again")

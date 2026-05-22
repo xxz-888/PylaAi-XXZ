@@ -773,6 +773,8 @@ def has_prestige_badge_shape(image):
 
 
 def is_in_prestige_reward(image):
+    if has_post_match_action_buttons(image):
+        return False
     button_center = get_prestige_next_button_center(image)
     if button_center is None:
         return False
@@ -793,6 +795,53 @@ def is_in_prestige_reward(image):
     )
     scale = max(0.05, (image.shape[1] / orig_screen_width) * (image.shape[0] / orig_screen_height))
     return prestige_purple > int(18000 * scale) and prestige_blue > int(12000 * scale)
+
+
+def _large_color_component_in_region(image, region, lower_hsv, upper_hsv, min_area=11000, min_width=150, min_height=45):
+    crop = crop_scaled_region(image, region)
+    if crop.size == 0:
+        return False
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(
+        hsv,
+        np.array(lower_hsv, dtype=np.uint8),
+        np.array(upper_hsv, dtype=np.uint8),
+    )
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), dtype=np.uint8))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return False
+    height, width = image.shape[:2]
+    scale = max(0.05, (width / orig_screen_width) * (height / orig_screen_height))
+    width_ratio = width / orig_screen_width
+    height_ratio = height / orig_screen_height
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        _x, _y, w, h = cv2.boundingRect(contour)
+        if (
+                area >= int(min_area * scale)
+                and w >= int(min_width * width_ratio)
+                and h >= int(min_height * height_ratio)
+        ):
+            return True
+    return False
+
+
+def has_post_match_action_buttons(image):
+    """Detect the result-screen PLAY AGAIN + PROCEED/EXIT action row."""
+    yellow_button = _large_color_component_in_region(
+        image,
+        [0, 805, 1460, 250],
+        (14, 80, 115),
+        (38, 255, 255),
+    )
+    blue_button = _large_color_component_in_region(
+        image,
+        [1080, 805, 820, 250],
+        (92, 75, 105),
+        (124, 255, 255),
+    )
+    return yellow_button and blue_button
 
 
 

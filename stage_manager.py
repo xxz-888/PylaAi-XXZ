@@ -15,6 +15,7 @@ from state_finder import (
     get_star_drop_type,
     get_skin_reward_equip_button_center,
     get_skin_reward_continue_button_center,
+    has_post_match_action_buttons,
 )
 from trophy_observer import TrophyObserver
 from utils import find_template_center, load_toml_as_dict, async_notify_user, \
@@ -251,6 +252,12 @@ class StageManager:
         if "exit" in normalized_text:
             return "exit"
         return ""
+
+    def still_on_post_match_action_screen(self, screenshot):
+        if screenshot is None or screenshot.size == 0:
+            return False
+        screenshot_bgr = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+        return has_post_match_action_buttons(screenshot_bgr)
 
     def restart_and_select_next_after_target(self, target, type_of_push):
         print("Target reached in Play Again mode; restarting Brawl Stars before selecting next brawler.")
@@ -984,6 +991,12 @@ class StageManager:
             time.sleep(self.end_screen_dismiss_delay)
             screenshot = self.window_controller.screenshot()
             current_state = get_state(screenshot)
+            if (
+                    not str(current_state).startswith("end")
+                    and found_game_result
+                    and self.still_on_post_match_action_screen(screenshot)
+            ):
+                current_state = f"end_{found_game_result}"
 
         print("Game has ended", current_state)
 
