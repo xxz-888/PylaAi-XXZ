@@ -9,30 +9,58 @@ import traceback
 from pathlib import Path
 
 
-def repair_numpy_before_cv2_import():
+def repair_python_runtime_before_cv2_import():
+    needs_repair = False
+    numpy_version = "unknown"
     try:
         import numpy
     except Exception:
+        needs_repair = True
+    else:
+        numpy_version = str(getattr(numpy, "__version__", "unknown"))
+        try:
+            major = int(numpy_version.split(".", 1)[0])
+        except (TypeError, ValueError):
+            major = 0
+        if major >= 2:
+            needs_repair = True
+
+    if not needs_repair:
+        try:
+            import cv2 as cv2_probe
+            if not getattr(cv2_probe, "__version__", None):
+                needs_repair = True
+        except Exception:
+            needs_repair = True
+
+    if not needs_repair:
         return
 
-    try:
-        major = int(str(numpy.__version__).split(".", 1)[0])
-    except (TypeError, ValueError):
-        return
-    if major < 2:
-        return
-
-    if os.environ.get("PYLAAI_NUMPY_REPAIR") == "1":
-        print(
-            "NumPy is still 2.x after repair. Run: "
-            f'"{sys.executable}" -m pip install --force-reinstall --no-deps "numpy<2.0.0"'
+    if os.environ.get("PYLAAI_CV2_REPAIR") == "1":
+        message = (
+            "Python image/runtime packages are still broken after repair. Run:\n"
+            f'"{sys.executable}" -m pip uninstall -y numpy opencv-python opencv-python-headless\n'
+            f'"{sys.executable}" -m pip install --force-reinstall --no-deps numpy==1.26.4\n'
+            f'"{sys.executable}" -m pip install --force-reinstall --no-deps opencv-python==4.8.0.76'
         )
-        return
+        print(message)
+        raise RuntimeError(message)
 
     print(
-        f"Detected NumPy {numpy.__version__}; repairing to numpy<2.0.0 before loading OpenCV..."
+        f"Repairing Python image/runtime packages before loading OpenCV "
+        f"(NumPy={numpy_version})..."
     )
-    os.environ["PYLAAI_NUMPY_REPAIR"] = "1"
+    os.environ["PYLAAI_CV2_REPAIR"] = "1"
+    subprocess.run([
+        sys.executable,
+        "-m",
+        "pip",
+        "uninstall",
+        "-y",
+        "opencv-python-headless",
+        "opencv-python",
+        "numpy",
+    ], check=False)
     subprocess.check_call([
         sys.executable,
         "-m",
@@ -40,11 +68,21 @@ def repair_numpy_before_cv2_import():
         "install",
         "--force-reinstall",
         "--no-deps",
-        "numpy<2.0.0",
+        "numpy==1.26.4",
     ])
+    subprocess.check_call([
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--force-reinstall",
+        "--no-deps",
+        "opencv-python==4.8.0.76",
+    ])
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
-repair_numpy_before_cv2_import()
+repair_python_runtime_before_cv2_import()
 
 import cv2
 

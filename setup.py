@@ -91,7 +91,7 @@ def setup_pyla():
 
     # Repair NumPy before installing/importing packages that load cv2.
     # OpenCV 4.8 wheels crash with NumPy 2.x (_ARRAY_API / multiarray errors).
-    force_install(["numpy<2.0.0"], no_deps=True)
+    force_install(["numpy==1.26.4"], no_deps=True)
     
     # installing must have Pytorch CPU
     force_install(["torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cpu"])
@@ -99,7 +99,7 @@ def setup_pyla():
     # installing some must have dependencies
     print("Installing Core Dependencies...")
     base_reqs = [
-        "numpy<2.0.0",
+        "numpy==1.26.4",
         "customtkinter>=5.2.0", "toml>=0.10.2", "Pillow>=10.0.0", "discord.py>=2.3.2",
         "opencv-python==4.8.0.76", "requests", "ultralytics", "aiohttp", "easyocr",
         "google-play-scraper", "pyautogui>=0.9.54", "packaging>=23.0", "PySide6>=6.7.0"
@@ -191,10 +191,13 @@ def setup_pyla():
 
     # some conflict fixes
     print("\n Finalizing and Repairing Conflicts...")
-    force_install(["numpy<2.0.0"], no_deps=True)
+    force_install(["numpy==1.26.4"], no_deps=True)
     force_install(["adbutils==2.12.0", "av==12.3.0"])
     force_install(["https://github.com/leng-yue/py-scrcpy-client/archive/refs/tags/v0.5.0.zip"], no_deps=True)
-    subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python-headless"], check=False)
+    subprocess.run([
+        sys.executable, "-m", "pip", "uninstall", "-y",
+        "opencv-python-headless", "opencv-python"
+    ], check=False)
     force_install(["opencv-python==4.8.0.76"], no_deps=True)
     create_run_file()
 

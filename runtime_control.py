@@ -132,6 +132,29 @@ def run_window(state_path):
         write_state(state_path, RUNNING)
         root.destroy()
 
+    def on_minimize():
+        root.overrideredirect(False)
+        root.iconify()
+
+    def restore_chrome(_event=None):
+        if root.state() != "iconic":
+            root.after(10, lambda: root.overrideredirect(True))
+
+    root.bind("<Map>", restore_chrome)
+
+    ctk.CTkButton(
+        chrome,
+        text="-",
+        command=on_minimize,
+        fg_color="transparent",
+        hover_color="#1f1f1f",
+        text_color="#b8b8b8",
+        font=("Segoe UI", 15, "bold"),
+        width=34,
+        height=28,
+        corner_radius=6,
+    ).place(relx=0.875, rely=0.5, anchor="e")
+
     ctk.CTkButton(
         chrome,
         text="×",
