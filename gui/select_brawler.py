@@ -1065,10 +1065,11 @@ class SelectBrawler:
     def open_brawler_entry(self, brawler):
         top = ctk.CTkToplevel(self.app)
         self._configure_frameless_window(top)
-        win_w = int(390 * scale_factor)
-        win_h = int(470 * scale_factor)
+        win_w = max(int(430 * scale_factor), 380)
+        win_h = max(int(560 * scale_factor), 520)
         top.geometry(
             f"{win_w}x{win_h}+{str(int(1100 * scale_factor))}+{str(int(200 * scale_factor))}")
+        top.minsize(win_w, min(win_h, 520))
         top.title("Enter Brawler Data")
         top.attributes("-topmost", True)
         self._create_window_chrome(top, "Brawler Setup", top.destroy)
@@ -1083,17 +1084,28 @@ class SelectBrawler:
         if api_trophies is not None:
             trophies_var.set(str(api_trophies))
 
-        body = self._modal_body(top, padx=22, pady=16)
-        card = ctk.CTkFrame(
+        body = self._modal_body(top, padx=18, pady=14)
+        body.grid_rowconfigure(0, weight=1)
+        body.grid_columnconfigure(0, weight=1)
+        scroll_body = ctk.CTkScrollableFrame(
             body,
+            fg_color=self.colors['dark gray'],
+            scrollbar_button_color=self.colors['panel2'],
+            scrollbar_button_hover_color=self.colors['gray'],
+        )
+        scroll_body.grid(row=0, column=0, sticky="nsew")
+        scroll_body.grid_columnconfigure(0, weight=1)
+        scroll_body._pyla_padx = body._pyla_padx
+        scroll_body._pyla_pady = body._pyla_pady
+        card = ctk.CTkFrame(
+            scroll_body,
             fg_color=self.colors['panel'],
             border_color=self.colors['gray'],
             border_width=1,
             corner_radius=int(10 * scale_factor),
         )
-        card.grid(row=0, column=0, padx=body._pyla_padx, pady=body._pyla_pady, sticky="nsew")
+        card.grid(row=0, column=0, padx=scroll_body._pyla_padx, pady=scroll_body._pyla_pady, sticky="nsew")
         card.grid_columnconfigure(0, weight=1)
-        body.grid_rowconfigure(0, weight=1)
 
         ctk.CTkLabel(
             card,
@@ -1108,7 +1120,7 @@ class SelectBrawler:
         fields_frame = ctk.CTkFrame(card, fg_color="transparent")
         fields_frame.grid(row=2, column=0, sticky="ew", padx=int(18 * scale_factor))
         fields_frame.grid_columnconfigure(0, weight=1)
-        entry_width = int(230 * scale_factor)
+        entry_width = max(int(260 * scale_factor), 220)
 
         def form_label(text):
             return ctk.CTkLabel(
@@ -1210,7 +1222,7 @@ class SelectBrawler:
             else:  # wins
                 fields_ok = target_ok and wins_var.get().isdigit()
             if fields_ok:
-                submit_button.grid(row=4, column=0, pady=(int(10 * scale_factor), int(16 * scale_factor)))
+                submit_button.grid(row=4, column=0, pady=(int(12 * scale_factor), int(22 * scale_factor)))
             else:
                 submit_button.grid_forget()
 
