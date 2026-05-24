@@ -57,6 +57,7 @@ teammate_follow_force_direct = "no"
 teammate_marker_follow_enabled = "yes"
 teammate_marker_edge_margin = 0.28
 teammate_marker_fallback_delay = 1.25
+fog_check_every_n_frames = 1
 seconds_to_hold_attack_after_reaching_max = 1.5
 play_again_on_win = "no"
 post_match_action = "lobby"

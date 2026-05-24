@@ -570,7 +570,7 @@ class Play(Movement):
         self.fog_min_pixels_in_radius = 50
         # Run the fog-threat check once every N calls to get_showdown_movement.
         # Between checks the previous decision is reused.
-        self.fog_check_every_n_frames = 3
+        self.fog_check_every_n_frames = max(1, int(bot_config.get("fog_check_every_n_frames", 1)))
         self._fog_check_counter = 0
         self._fog_threat_cached = None
         self._fog_direction_escape_cached = None
@@ -938,13 +938,13 @@ class Play(Movement):
 
         Result is cached per-frame (keyed by id(frame) and ROI tuple).
         """
-        if frame is None:
+        if frame is None or not hasattr(frame, "shape"):
             return None
 
         roi_radius = int(max(1, roi_radius))
         cache_key = (id(frame), int(roi_center[0]), int(roi_center[1]), int(roi_radius))
-        if self._fog_mask_cache_frame_id == cache_key:
-            return self._fog_mask_cache_value
+        if getattr(self, "_fog_mask_cache_frame_id", None) == cache_key:
+            return getattr(self, "_fog_mask_cache_value", None)
 
         import numpy as np
         h, w = frame.shape[:2]
@@ -1077,6 +1077,19 @@ class Play(Movement):
         vlog(f"directional fog escape: counts={direction_counts} -> angle={angle:.1f} deg")
         return angle
 
+    def _refresh_fog_cache(self, frame, player_position):
+        """Build smoke threat state once, then reuse it across movement decisions."""
+        if frame is None or player_position is None:
+            self._fog_threat_cached = None
+            self._fog_direction_escape_cached = None
+            return
+        self._fog_threat_cached = self.detect_fog_threat(frame, player_position)
+        self._fog_direction_escape_cached = self.detect_fog_direction_escape(frame, player_position)
+
+    def _follow_teammate_locked_nearby(self, player_pos, teammate_data, walls=None):
+        locked, dist = self.choose_locked_teammate(player_pos, teammate_data or [], walls)
+        return locked is not None and dist <= self.teammate_combat_regroup_distance
+
     def detect_jump_pad_smoke_escape(self, frame, player_position):
         """Return a softer fog escape angle for jump-pad decisions only.
 
@@ -1124,7 +1137,8 @@ class Play(Movement):
         """
         if frame is None or player_position is None or angle_degrees is None:
             return False
-        r = int(max(140, lookahead or self.fog_flee_distance * 1.7))
+        fog_flee_distance = float(getattr(self, "fog_flee_distance", 130))
+        r = int(max(140, lookahead or fog_flee_distance * 1.7))
         built = self._build_trusted_fog_mask(frame, roi_center=player_position, roi_radius=r)
         if built is None:
             return False
@@ -1446,9 +1460,9 @@ class Play(Movement):
             if no_recent_teammate:
                 marker_angle = self.teammate_marker_follow_angle(player_pos)
                 if marker_angle is not None:
-                    return marker_angle
+                    return self._wall_aware_follow_angle(player_pos, marker_angle, walls)
             vlog("follow teammate: no teammate detected -> roam")
-            return self.showdown_roam(player_data, walls)
+            return self._wall_aware_follow_angle(player_pos, self.showdown_roam(player_data, walls), walls)
 
         direction_x = closest_teammate[0] - player_pos[0]
         direction_y = closest_teammate[1] - player_pos[1]
@@ -1460,7 +1474,7 @@ class Play(Movement):
                 and not self.is_path_blocked_angle(player_pos, direct_angle, walls)
         ):
             vlog(f"follow teammate: force direct -> angle={direct_angle:.1f}° (dist={int(closest_distance)}px)")
-            return direct_angle
+            return self._wall_aware_follow_angle(player_pos, direct_angle, walls)
 
         movement_vectors = [(direction_x, direction_y), (direction_x, 0), (0, direction_y)]
         fallback_angle = direct_angle
@@ -1473,15 +1487,22 @@ class Play(Movement):
                 fallback_angle = angle
             if not self.is_path_blocked_angle(player_pos, angle, walls):
                 vlog(f"follow teammate -> angle={angle:.1f}° (dist={int(closest_distance)}px)")
-                return angle
+                return self._wall_aware_follow_angle(player_pos, angle, walls)
 
         for angle in (270.0, 180.0, 90.0, 0.0):
             if not self.is_path_blocked_angle(player_pos, angle, walls):
                 vlog(f"follow teammate: preferred blocked -> fallback angle={angle:.1f}°")
-                return angle
+                return self._wall_aware_follow_angle(player_pos, angle, walls)
 
         angle = fallback_angle if fallback_angle is not None else self.showdown_roam(player_data, walls)
         vlog(f"follow teammate: all paths blocked -> forcing angle={float(angle):.1f}°")
+        return self._wall_aware_follow_angle(player_pos, angle, walls)
+
+    def _wall_aware_follow_angle(self, player_pos, angle, walls):
+        if isinstance(angle, (int, float)):
+            if not walls:
+                return float(angle) % 360
+            return self.find_best_angle(player_pos, float(angle), walls)
         return angle
 
     def get_showdown_movement(self, player_data, enemy_data, teammate_data, walls, brawler, jump_pads=None):
@@ -1507,40 +1528,37 @@ class Play(Movement):
         enemy_distance = None
         follow_teammates = self.showdown_playstyle_mode in ("follow", "follower", "team", "teammate", "teammates")
 
-        # Fog override is applied uniformly at the end so it works for all
-        # movement sources. In teammate-follow mode this check is deliberately
-        # unthrottled; following a teammate toward smoke is worse than spending
-        # a few extra milliseconds checking the screen.
+        # Smoke override is applied uniformly so it beats teammate-follow,
+        # combat strafing, and ordinary roaming. Keep this fast by caching the
+        # screen analysis, but default to checking every frame.
         self._fog_check_counter += 1
         if follow_teammates or self._fog_check_counter >= self.fog_check_every_n_frames:
-            self._fog_threat_cached = self.detect_fog_threat(self.current_frame, player_pos)
-            self._fog_direction_escape_cached = self.detect_fog_direction_escape(self.current_frame, player_pos)
+            self._refresh_fog_cache(self.current_frame, player_pos)
             self._fog_check_counter = 0
-        fog_flee_angle = self._fog_direction_escape_cached or self._fog_threat_cached
-        if follow_teammates and fog_flee_angle is not None:
-            angle = self.find_best_angle(player_pos, fog_flee_angle, walls)
-            vlog(f"showdown: teammate follow paused for smoke escape -> angle={angle:.1f}°")
-            enemy_coords, enemy_distance = None, None
-            jump_pad_flee_angle = fog_flee_angle
-            if (
-                    jump_pads
-                    and self.jump_pad_detection_enabled
-                    and (not self.jump_pad_escape_requires_edge or self.is_player_near_map_edge(player_pos))
-                    and not self.has_close_teammate_for_jump_escape(player_pos, teammate_data)
-            ):
-                jump_pad_flee_angle = self.detect_jump_pad_smoke_escape(self.current_frame, player_pos) or fog_flee_angle
-            if jump_pad_flee_angle is not None:
-                jump_pad_angle = self.find_jump_pad_escape_angle(
-                    player_pos,
-                    jump_pads or [],
-                    walls,
-                    jump_pad_flee_angle,
-                    teammate_data=teammate_data,
+        fog_threat_angle = self._fog_threat_cached
+        fog_direction_escape = self._fog_direction_escape_cached
+        active_fog_pressure = (
+                fog_direction_escape is not None
+                or (
+                    fog_threat_angle is not None
+                    and not (
+                        follow_teammates
+                        and self._follow_teammate_locked_nearby(player_pos, teammate_data, walls)
+                    )
                 )
-                if jump_pad_angle is not None:
-                    angle = jump_pad_angle
-                    vlog(f"showdown: teammate smoke escape -> jump pad angle={angle:.1f}°")
-            return angle
+        )
+        if follow_teammates:
+            if fog_direction_escape is not None:
+                angle = self.find_best_angle(player_pos, fog_direction_escape, walls)
+                vlog(f"showdown: teammate follow paused for directional smoke escape -> angle={angle:.1f}°")
+                return angle
+            if (
+                    fog_threat_angle is not None
+                    and not self._follow_teammate_locked_nearby(player_pos, teammate_data, walls)
+            ):
+                angle = self.find_best_angle(player_pos, fog_threat_angle, walls)
+                vlog(f"showdown: teammate follow paused for smoke escape -> angle={angle:.1f}°")
+                return angle
 
         # --- No enemy in sight: follow teammate or roam ---
         if not self.is_there_enemy(enemy_data):
@@ -1599,7 +1617,7 @@ class Play(Movement):
 
                 if (
                         self.strafe_enabled
-                        and fog_flee_angle is None
+                        and not active_fog_pressure
                         and safe_range < enemy_distance <= attack_range
                 ):
                     strafe_angle = self.get_strafe_angle(toward_angle, now_t, enemy_distance, safe_range)
@@ -1607,7 +1625,7 @@ class Play(Movement):
                     vlog(f"strafe blend → desired={desired:.1f}°")
                 elif (
                         self.strafe_enabled
-                        and fog_flee_angle is None
+                        and not active_fog_pressure
                         and enemy_distance <= safe_range
                         and self.retreat_strafe_fraction > 0
                 ):
@@ -1619,12 +1637,16 @@ class Play(Movement):
                     )
                     vlog(f"retreat strafe blend -> desired={desired:.1f}°")
 
-                if self.strafe_enabled and fog_flee_angle is None and enemy_distance <= attack_range:
+                if self.strafe_enabled and not active_fog_pressure and enemy_distance <= attack_range:
                     desired = self.apply_combat_dodge(desired, toward_angle, now_t, enemy_distance, safe_range)
                     vlog(f"combat dodge blend -> desired={desired:.1f}°")
 
                 if (follow_teammates and teammate_data and enemy_distance > attack_range):
-                    closest_teammate, teammate_distance = self.get_closest_teammate(player_data, teammate_data)
+                    closest_teammate, teammate_distance = self.choose_locked_teammate(
+                        player_pos,
+                        teammate_data,
+                        walls,
+                    )
                     if closest_teammate is not None and teammate_distance > self.teammate_follow_step_distance:
                         team_angle = self.angle_from_direction(
                             closest_teammate[0] - player_pos[0],
@@ -1641,24 +1663,42 @@ class Play(Movement):
 
         if (
                 follow_teammates
-                and fog_flee_angle is None
+                and fog_direction_escape is None
                 and self.angle_points_into_fog(self.current_frame, player_pos, angle)
         ):
-            fog_flee_angle = self.detect_fog_direction_escape(self.current_frame, player_pos) or self.angle_opposite(angle)
-            vlog(f"showdown: follow path points into fog -> fallback escape={fog_flee_angle:.1f}°")
+            path_flee_angle = self.angle_opposite(angle)
+            vlog(f"showdown: follow path points into fog -> fallback escape={path_flee_angle:.1f}°")
+        else:
+            path_flee_angle = None
 
         # --- Fog proximity override ---
-        # If trusted fog is close, replace movement with a flee angle. Attack
+        # If trusted smoke is close, replace movement with a flee angle. Attack
         # block below still fires independently based on enemy_distance.
-        jump_pad_flee_angle = fog_flee_angle
+        if fog_direction_escape is not None:
+            angle = self.find_best_angle(player_pos, fog_direction_escape, walls)
+            vlog(f"showdown: fog override -> directional escape angle={angle:.1f}°")
+        elif path_flee_angle is not None:
+            angle = self.find_best_angle(player_pos, path_flee_angle, walls)
+            vlog(f"showdown: fog override -> path escape angle={angle:.1f}°")
+        elif (
+                fog_threat_angle is not None
+                and not (
+                    follow_teammates
+                    and self._follow_teammate_locked_nearby(player_pos, teammate_data, walls)
+                )
+        ):
+            angle = self.find_best_angle(player_pos, fog_threat_angle, walls)
+            vlog(f"showdown: fog threat override -> angle={angle:.1f}°")
+
+        jump_pad_flee_angle = None
         if (
-                jump_pad_flee_angle is None
+                fog_direction_escape is None
                 and jump_pads
                 and self.jump_pad_detection_enabled
                 and (not self.jump_pad_escape_requires_edge or self.is_player_near_map_edge(player_pos))
                 and not self.has_close_teammate_for_jump_escape(player_pos, teammate_data)
         ):
-            jump_pad_flee_angle = self.detect_jump_pad_smoke_escape(self.current_frame, player_pos)
+            jump_pad_flee_angle = path_flee_angle or fog_threat_angle or self.detect_jump_pad_smoke_escape(self.current_frame, player_pos)
 
         if jump_pad_flee_angle is not None:
             jump_pad_angle = self.find_jump_pad_escape_angle(
@@ -1671,9 +1711,6 @@ class Play(Movement):
             if jump_pad_angle is not None:
                 angle = jump_pad_angle
                 vlog(f"showdown: fog override -> jump pad angle={angle:.1f}°")
-            elif fog_flee_angle is not None:
-                angle = self.find_best_angle(player_pos, fog_flee_angle, walls)
-                vlog(f"showdown: fog override → angle={angle:.1f}°")
 
         # --- Skills (only when an attackable enemy was found) ---
         if enemy_coords is None:
@@ -1984,26 +2021,27 @@ class Play(Movement):
         movement = self.enemy_pressure_movement_fallback(movement, data, brawler, current_time)
 
         current_time = time.time()
-        if current_time - self.time_since_movement > self.minimum_movement_delay:
-            if isinstance(movement, float):
-                # 1. If a semicircle escape is already running, just advance it.
-                escape_angle = self.semicircle_escape_step(current_time)
-                if escape_angle is not None:
-                    movement = escape_angle
-                else:
-                    # 2. Wall-based stuck detector triggers the semicircle escape.
-                    player_pos = self.get_player_pos(data['player'][0]) if data.get('player') else None
-                    walls = data.get('wall') or []
-                    is_trying = isinstance(movement, float)
-                    if self.detect_wall_stuck(walls, player_pos, is_trying, current_time):
-                        self.capture_vision_frame("wall_stuck", self.current_frame, data, brawler)
-                        self.start_semicircle_escape(movement, current_time)
-                        self._reset_wall_stuck_state(current_time)
-                        movement = self.semicircle_escape_step(current_time) or movement
+        if isinstance(movement, float):
+            # Analog showdown movement must update every frame. Throttling it
+            # can leave the bot standing or walking into smoke with a stale
+            # joystick angle.
+            escape_angle = self.semicircle_escape_step(current_time)
+            if escape_angle is not None:
+                movement = escape_angle
             else:
-                movement = self.unstuck_movement_if_needed(movement, current_time)
+                player_pos = self.get_player_pos(data['player'][0]) if data.get('player') else None
+                walls = data.get('wall') or []
+                if self.detect_wall_stuck(walls, player_pos, True, current_time):
+                    self.capture_vision_frame("wall_stuck", self.current_frame, data, brawler)
+                    self.start_semicircle_escape(movement, current_time)
+                    self._reset_wall_stuck_state(current_time)
+                    movement = self.semicircle_escape_step(current_time) or movement
             self.do_movement(movement)
-            self.time_since_movement = time.time()
+            self.time_since_movement = current_time
+        elif current_time - self.time_since_movement > self.minimum_movement_delay:
+            movement = self.unstuck_movement_if_needed(movement, current_time)
+            self.do_movement(movement)
+            self.time_since_movement = current_time
         return movement
 
     def enemy_pressure_movement_fallback(self, movement, data, brawler, current_time):
