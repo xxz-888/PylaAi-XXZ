@@ -255,7 +255,7 @@ def install_vc_redist():
 def create_run_file(project_dir, python_command):
     python_invocation = " ".join(f'"{part}"' if " " in part else part for part in python_command)
     run_bat = project_dir / "Run PylaAi-XXZ.bat"
-    run_bat.write_text(
+    contents = (
         "@echo off\n"
         "cd /d %~dp0\n"
         "set OMP_NUM_THREADS=2\n"
@@ -263,10 +263,15 @@ def create_run_file(project_dir, python_command):
         "set MKL_NUM_THREADS=2\n"
         "set NUMEXPR_NUM_THREADS=2\n"
         f"{python_invocation} main.py\n"
-        "pause\n",
-        encoding="ascii",
+        "pause\n"
     )
-    print(f"Created {run_bat.name}")
+    try:
+        run_bat.write_text(contents, encoding="ascii")
+        print(f"Created {run_bat.name}")
+    except PermissionError:
+        fallback = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop" / "Run PylaAi-XXZ.bat"
+        fallback.write_text(contents.replace("cd /d %~dp0", f'cd /d "{project_dir}"'), encoding="ascii")
+        print(f"Created {fallback} because the project folder is not writable.")
 
 
 def main():

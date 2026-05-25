@@ -19,7 +19,8 @@ from state_finder import (
 )
 from trophy_observer import TrophyObserver
 from utils import find_template_center, load_toml_as_dict, async_notify_user, \
-    save_brawler_data, extract_text_strings, load_brawl_stars_api_config, fetch_brawl_stars_player, normalize_brawler_name
+    save_brawler_data, extract_text_strings, load_brawl_stars_api_config, fetch_brawl_stars_player, normalize_brawler_name, \
+    brawler_data_file_path
 
 debug = load_toml_as_dict("cfg/general_config.toml")['super_debug'] == "yes"
 
@@ -586,13 +587,19 @@ class StageManager:
         print("state is lobby, starting game")
         if getattr(self, "stop_after_post_match_rewards", False):
             print("Post-match rewards cleared; stopping after completed target.")
-            if os.path.exists("latest_brawler_data.json"):
-                os.remove("latest_brawler_data.json")
+            queue_path = brawler_data_file_path()
+            if os.path.exists(queue_path):
+                os.remove(queue_path)
             self.window_controller.keys_up(list("wasd"))
             self.window_controller.close()
             sys.exit(0)
-        self.push_all_needs_selection = False
+        prepared_selection_needed = bool(
+            getattr(self, "push_all_needs_selection", False)
+            or getattr(self, "target_switch_prepared", False)
+        )
         self.refresh_push_all_trophies_from_api()
+        if prepared_selection_needed and self.brawlers_pick_data:
+            self.push_all_needs_selection = True
         if not self.brawlers_pick_data:
             print("Bot stopping: all Push All targets completed.")
             self.window_controller.keys_up(list("wasd"))

@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from gui.select_brawler import SelectBrawler
 import utils
@@ -127,6 +127,16 @@ class BrawlerApiAutofillTest(unittest.TestCase):
             [call.args[1] for call in mock_post.call_args_list],
             ["login", "account/load", "login", "account/load", "apikey/list", "apikey/create"],
         )
+
+    @patch("utils.time.sleep", return_value=None)
+    def test_developer_portal_timeout_message_does_not_blame_missing_config(self, _mock_sleep):
+        session = MagicMock()
+        session.post.side_effect = utils.requests.exceptions.ReadTimeout("timed out")
+
+        with self.assertRaisesRegex(RuntimeError, "developer portal timed out"):
+            utils._developer_api_post(session, "login", {"email": "user@example.com"}, timeout=1, attempts=2)
+
+        self.assertEqual(session.post.call_count, 2)
 
     @patch("utils.refresh_brawl_stars_api_token_if_enabled")
     def test_load_config_uses_existing_token_when_auto_refresh_session_fails(self, mock_refresh):

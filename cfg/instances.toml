@@ -1,0 +1,11 @@
+[multi_instance]
+enabled = true
+default_instance = "default"
+
+[instances.default]
+name = "Default Instance"
+enabled = true
+emulator = "mumu"
+emulator_port = 16384
+emulator_profile_index = "auto"
+queue_path = "instances/default/latest_brawler_data.json"

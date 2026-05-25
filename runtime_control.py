@@ -8,6 +8,7 @@ from pathlib import Path
 
 RUNNING = "running"
 PAUSED = "paused"
+STOP_REQUESTED = "stop_requested"
 
 
 def write_state(path, state):
@@ -44,6 +45,9 @@ class RuntimeControlWindow:
 
     def is_paused(self):
         return read_state(self.state_path) == PAUSED
+
+    def is_stop_requested(self):
+        return read_state(self.state_path) == STOP_REQUESTED
 
     def close(self):
         write_state(self.state_path, RUNNING)

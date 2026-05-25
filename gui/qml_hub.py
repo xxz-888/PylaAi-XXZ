@@ -1,6 +1,8 @@
 import sys
 import json
 import subprocess
+import threading
+from urllib.parse import unquote
 from pathlib import Path
 
 from gui.hub_state import HubStateStore
@@ -128,8 +130,19 @@ class QmlHub:
                 if action == "telegram-test":
                     from telegram_notifier import async_send_test_notification
 
-                    ok = asyncio.run(async_send_test_notification())
-                    return "Telegram test sent." if ok else "Telegram test failed. Send /start once and check the token."
+                    def send_test():
+                        try:
+                            ok = asyncio.run(async_send_test_notification())
+                            print(
+                                "Telegram test sent."
+                                if ok
+                                else "Telegram test failed. Send /start once and check the token/chat ID."
+                            )
+                        except Exception as exc:
+                            print(f"Telegram test failed: {exc}")
+
+                    threading.Thread(target=send_test, daemon=True).start()
+                    return "Telegram test is sending in the background."
                 if action == "telegram-find-chats":
                     from telegram_notifier import async_fetch_recent_chat_ids
 
@@ -182,6 +195,74 @@ class QmlHub:
                     self._store.bot_config.clear()
                     self._store.bot_config.update(result["bot_config"])
                     return f"Applied {result['profile']} profile. Restart the bot to use it."
+                if action == "instance-enable":
+                    from gui.instance_config import ensure_multi_instance_profiles, set_multi_instance_enabled
+
+                    set_multi_instance_enabled(True)
+                    ensure_multi_instance_profiles()
+                    return "Multi-instance mode enabled."
+                if action == "instance-disable":
+                    from gui.instance_config import set_multi_instance_enabled
+
+                    set_multi_instance_enabled(False)
+                    return "Multi-instance mode disabled."
+                if action == "instance-create-default":
+                    from gui.instance_config import migrate_single_instance_to_default, set_multi_instance_enabled
+
+                    set_multi_instance_enabled(True)
+                    migrate_single_instance_to_default()
+                    return "Default instance is ready."
+                if action.startswith("instance-add:"):
+                    from gui.instance_config import next_free_emulator_port, set_multi_instance_enabled, upsert_instance_profile
+
+                    emulator = action.split(":", 1)[1]
+                    set_multi_instance_enabled(True)
+                    port = next_free_emulator_port(emulator)
+                    instance_id = f"{emulator}-{port}"
+                    upsert_instance_profile(instance_id, {
+                        "name": f"{emulator.title()} {port}",
+                        "emulator": emulator,
+                        "emulator_port": port,
+                    })
+                    return f"Added instance '{instance_id}'."
+                if action.startswith("instance-add-named:"):
+                    from gui.instance_config import (
+                        resolve_emulator_instance,
+                        set_multi_instance_enabled,
+                        upsert_instance_profile,
+                    )
+
+                    _prefix, emulator, raw_name = action.split(":", 2)
+                    instance = resolve_emulator_instance(emulator, unquote(raw_name))
+                    set_multi_instance_enabled(True)
+                    instance_id = instance["name"]
+                    profile = upsert_instance_profile(instance_id, {
+                        "name": instance["name"],
+                        "emulator": instance["emulator"],
+                        "emulator_port": instance["emulator_port"],
+                        "emulator_profile_index": instance["emulator_profile_index"],
+                        "emulator_instance_name": instance["name"],
+                    })
+                    return (
+                        f"Added {profile['name']} on port {profile['emulator_port']}. "
+                        "Start it from the instance list."
+                    )
+                if action.startswith("instance-start:"):
+                    from gui.instance_supervisor import InstanceSupervisor
+
+                    instance_id = action.split(":", 1)[1]
+                    ok, message = InstanceSupervisor().start_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action.startswith("instance-stop:"):
+                    from gui.instance_supervisor import InstanceSupervisor
+
+                    instance_id = action.split(":", 1)[1]
+                    ok, message = InstanceSupervisor().stop_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
                 raise ValueError(f"Unknown action: {action}")
 
             @Slot()

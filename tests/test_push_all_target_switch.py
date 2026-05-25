@@ -453,6 +453,45 @@ class PushAllTargetSwitchTest(unittest.TestCase):
         self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "second")
         self.assertEqual(manager.Trophy_observer.current_trophies, 0)
 
+    @patch.object(StageManager, "refresh_push_all_trophies_from_api", return_value=False)
+    @patch("stage_manager.save_brawler_data")
+    @patch("stage_manager.time.sleep", return_value=None)
+    @patch("stage_manager.get_state", return_value="lobby")
+    def test_prepared_push_all_switch_selects_next_brawler_before_starting_match(self, *_):
+        manager = self.make_manager(500)
+        manager.brawlers_pick_data = [
+            {
+                "brawler": "second",
+                "push_until": 500,
+                "trophies": 248,
+                "wins": 0,
+                "type": "trophies",
+                "automatically_pick": True,
+                "win_streak": 0,
+                "selection_method": "lowest_trophies",
+            },
+            {
+                "brawler": "third",
+                "push_until": 500,
+                "trophies": 310,
+                "wins": 0,
+                "type": "trophies",
+                "automatically_pick": True,
+                "win_streak": 0,
+                "selection_method": "lowest_trophies",
+            },
+        ]
+        manager.Trophy_observer = DummyTrophyObserver(248)
+        manager.target_switch_prepared = True
+        manager.push_all_needs_selection = True
+
+        manager.start_game()
+
+        self.assertEqual(manager.Lobby_automation.lowest_calls, 1)
+        self.assertFalse(manager.target_switch_prepared)
+        self.assertFalse(manager.push_all_needs_selection)
+        self.assertIn("Q", manager.window_controller.pressed)
+
 
 if __name__ == "__main__":
     unittest.main()

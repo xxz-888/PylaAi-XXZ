@@ -100,6 +100,7 @@ from gui.main import App
 from gui.select_brawler import SelectBrawler
 from lobby_automation import LobbyAutomation
 from play import Play
+from recovery_events import log_recovery
 from runtime_control import RuntimeControlWindow
 from stage_manager import StageManager
 from state_finder import (
@@ -384,6 +385,23 @@ def pyla_main(data):
             self.disconnect_ocr_interval = 6.0
             self.control_window = RuntimeControlWindow()
             self.control_window.start()
+            self.instance_id = os.environ.get("PYLA_INSTANCE_ID", "").strip()
+            if self.instance_id:
+                try:
+                    from gui.instance_registry import build_manifest, write_manifest
+
+                    write_manifest(
+                        self.instance_id,
+                        build_manifest(
+                            self.instance_id,
+                            state_path=self.control_window.state_path,
+                            metrics_path="",
+                            snapshot=self.instance_snapshot(),
+                        ),
+                    )
+                    print(f"Registered multi-instance worker: {self.instance_id}")
+                except Exception as exc:
+                    print(f"Could not register multi-instance worker: {exc}")
             self.discord_control = DiscordControlServer(
                 self.control_window.state_path,
                 screenshot_provider=self.window_controller.screenshot,
@@ -422,6 +440,45 @@ def pyla_main(data):
                 "target": current.get("push_until", ""),
             }
 
+        def instance_snapshot(self):
+            current = self.Stage_manager.brawlers_pick_data[0] if self.Stage_manager.brawlers_pick_data else {}
+            status = self.telegram_status()
+            return {
+                **status,
+                "uptime_s": round(time.time() - self.started_at, 1),
+                "queue_preview": ", ".join(
+                    str(item.get("brawler", ""))
+                    for item in self.Stage_manager.brawlers_pick_data[:3]
+                    if isinstance(item, dict)
+                ),
+                "session_wins": self.Stage_manager.Trophy_observer.current_wins,
+                "session_losses": 0,
+                "session_draws": 0,
+                "brawler": current.get("brawler", ""),
+                "target": current.get("push_until", ""),
+            }
+
+        def update_instance_manifest(self):
+            if not getattr(self, "instance_id", ""):
+                return
+            try:
+                from gui.instance_registry import update_manifest_heartbeat
+
+                update_manifest_heartbeat(
+                    self.instance_id,
+                    self.instance_snapshot(),
+                    state_path=self.control_window.state_path,
+                    metrics_path="",
+                )
+            except Exception as exc:
+                print(f"Could not update instance manifest: {exc}")
+
+        def log_runtime_recovery(self, event_type, detail="", notice=""):
+            try:
+                log_recovery(event_type, detail=detail, notice=notice)
+            except Exception as exc:
+                print(f"Recovery event log failed: {exc}")
+
         def discord_press_key(self, key):
             normalized = str(key or "").strip().upper()
             self.window_controller.press_key(normalized)
@@ -438,6 +495,7 @@ def pyla_main(data):
             return loaded_models
 
         def restart_brawl_stars(self):
+            self.log_runtime_recovery("restart_brawl_stars", detail=f"state={self.state or 'unknown'}")
             if not self.window_controller.restart_brawl_stars():
                 return False
             if not self.window_controller.restart_scrcpy_client():
@@ -575,6 +633,10 @@ def pyla_main(data):
                 f"Frame feed stayed under 3 FPS for {now - self.low_feed_since:.1f}s "
                 f"(feed_fps={self.perf_feed_fps:.2f}); recovery attempt {self.slow_feed_recovery_attempts}."
             )
+            self.log_runtime_recovery(
+                "slow_feed_scrcpy_restart",
+                detail=f"feed_fps={self.perf_feed_fps:.2f}; attempt={self.slow_feed_recovery_attempts}",
+            )
             self.window_controller.keys_up(list("wasd"))
             if not self.window_controller.restart_scrcpy_client():
                 self.handle_offline_emulator()
@@ -647,6 +709,10 @@ def pyla_main(data):
             print(
                 f"IPS stayed low ({current_ips:.2f}, frame age {frame_age:.1f}s) "
                 f"for {low_for:.1f}s; recovery attempt {self.low_ips_recovery_attempts}."
+            )
+            self.log_runtime_recovery(
+                "low_ips_recovery",
+                detail=f"ips={current_ips:.2f}; frame_age={frame_age:.1f}; attempt={self.low_ips_recovery_attempts}",
             )
 
             if self.low_ips_recovery_attempts >= self.low_ips_emulator_restart_after:
@@ -744,6 +810,10 @@ def pyla_main(data):
                 "Screen health check found no visible change for "
                 f"{self.global_freeze_health_interval:.0f}s (diff {diff:.3f}); "
                 f"recovery attempt {self.global_freeze_recovery_attempts}."
+            )
+            self.log_runtime_recovery(
+                "screen_freeze_recovery",
+                detail=f"diff={diff:.3f}; attempt={self.global_freeze_recovery_attempts}",
             )
             self.window_controller.keys_up(list("wasd"))
             if self.global_freeze_recovery_attempts >= self.global_freeze_emulator_restart_after:
@@ -1028,6 +1098,10 @@ def pyla_main(data):
             self.disconnect_reload_attempts += 1
             self.window_controller.keys_up(list("wasd"))
             print(f"Disconnect/login screen detected, recovery attempt {self.disconnect_reload_attempts}.")
+            self.log_runtime_recovery(
+                "disconnect_screen",
+                detail=f"attempt={self.disconnect_reload_attempts}",
+            )
             if self.disconnect_reload_attempts >= 3:
                 print("Retry did not clear disconnect screen; restarting Brawl Stars.")
                 self.restart_brawl_stars()
@@ -1060,6 +1134,7 @@ def pyla_main(data):
                     - (now - self.window_controller.last_emulator_restart_time)
                 )
                 if remaining <= 0:
+                    self.log_runtime_recovery("offline_emulator_restart", detail="ADB offline")
                     if self.window_controller.restart_emulator_profile():
                         self.reset_visual_freeze_watchdog()
                         self.reset_low_ips_watchdog(recovered=False)
@@ -1090,6 +1165,10 @@ def pyla_main(data):
 
             self.last_stale_feed_recovery = now
             self.stale_feed_recovery_attempts += 1
+            self.log_runtime_recovery(
+                "stale_scrcpy_feed",
+                detail=f"age={age_text}; attempt={self.stale_feed_recovery_attempts}",
+            )
 
             if self.stale_feed_recovery_attempts >= self.stale_feed_emulator_restart_after or stale_age > 60:
                 print("Scrcpy feed is still frozen after recovery attempts; restarting emulator profile.")
@@ -1138,6 +1217,10 @@ def pyla_main(data):
             s_time = time.time()
             c = 0
             while True:
+                if self.control_window.is_stop_requested():
+                    print("Stop requested for this PylaAi-XXZ instance.")
+                    self.window_controller.keys_up(list("wasd"))
+                    break
                 if self.handle_pause_control():
                     s_time = time.time()
                     c = 0
@@ -1173,6 +1256,7 @@ def pyla_main(data):
                         if self.ips_ema is not None and self.ips_ema < 3 and time.time() - self.low_frame_fps_warning_time > 20:
                             self.print_low_ips_detail(self.ips_ema)
                             self.low_frame_fps_warning_time = time.time()
+                    self.update_instance_manifest()
                     s_time = time.time()
                     c = 0
 
@@ -1267,6 +1351,13 @@ def pyla_main(data):
             self.discord_control.close()
             self.telegram_control.close()
             self.control_window.close()
+            if getattr(self, "instance_id", ""):
+                try:
+                    from gui.instance_registry import remove_manifest
+
+                    remove_manifest(self.instance_id)
+                except Exception:
+                    pass
 
     main = Main()
     main.main()
@@ -1286,6 +1377,31 @@ def run_app():
     app.start(pyla_version, get_latest_version)
 
 
+def run_instance(instance_id):
+    from gui.instance_config import apply_instance_overrides, get_queue_path, set_active_instance
+
+    set_active_instance(instance_id)
+    profile = apply_instance_overrides(instance_id)
+    if not profile:
+        raise ValueError(f"Unknown multi-instance profile: {instance_id}")
+
+    queue_path = Path(get_queue_path(instance_id))
+    if not queue_path.is_absolute():
+        queue_path = Path(__file__).resolve().parent / queue_path
+    if not queue_path.exists():
+        raise FileNotFoundError(f"No brawler queue found for instance '{instance_id}': {queue_path}")
+    with queue_path.open("r", encoding="utf-8") as handle:
+        brawler_data = json.load(handle)
+    if not isinstance(brawler_data, list) or not brawler_data:
+        raise ValueError(f"Instance '{instance_id}' has an empty brawler queue: {queue_path}")
+
+    print(
+        f"Starting PylaAi-XXZ instance '{instance_id}' "
+        f"on {profile['emulator']} port {profile['emulator_port']}."
+    )
+    pyla_main(brawler_data)
+
+
 def write_crash_log(error):
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
@@ -1300,7 +1416,10 @@ def write_crash_log(error):
 
 if __name__ == "__main__":
     try:
-        run_app()
+        if len(sys.argv) >= 3 and sys.argv[1] == "--instance":
+            run_instance(sys.argv[2])
+        else:
+            run_app()
     except Exception as e:
         write_crash_log(e)
         try:

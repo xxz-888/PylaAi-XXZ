@@ -3,6 +3,7 @@ import platform
 import subprocess
 import os
 from pathlib import Path
+from config_paths import resolve_project_path
 
 if platform.system() != "Windows" or "microsoft" in platform.uname()[3].lower():
     print("\n" + "!"*50)
@@ -38,7 +39,7 @@ def force_install(reqs, no_deps=False):
 def save_gpu_runtime_config(variant, cards):
     import toml
 
-    config_path = Path("cfg") / "general_config.toml"
+    config_path = Path(resolve_project_path("cfg/general_config.toml"))
     config = toml.load(config_path) if config_path.exists() else {}
     apply_gpu_config(config, variant, cards)
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,7 +51,7 @@ def save_gpu_runtime_config(variant, cards):
 
 def create_run_file():
     run_bat = Path("Run PylaAi-XXZ.bat")
-    run_bat.write_text(
+    contents = (
         "@echo off\n"
         "cd /d %~dp0\n"
         "set OMP_NUM_THREADS=2\n"
@@ -58,10 +59,15 @@ def create_run_file():
         "set MKL_NUM_THREADS=2\n"
         "set NUMEXPR_NUM_THREADS=2\n"
         f"\"{sys.executable}\" main.py\n"
-        "pause\n",
-        encoding="ascii",
+        "pause\n"
     )
-    print(f"Created {run_bat.name}")
+    try:
+        run_bat.write_text(contents, encoding="ascii")
+        print(f"Created {run_bat.name}")
+    except PermissionError:
+        fallback = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop" / "Run PylaAi-XXZ.bat"
+        fallback.write_text(contents.replace("cd /d %~dp0", f'cd /d "{Path.cwd()}"'), encoding="ascii")
+        print(f"Created {fallback} because the project folder is not writable.")
 
 def remove_onnxruntime_variants():
     subprocess.run([

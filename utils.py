@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from io import BytesIO
 import ctypes
 import json
@@ -16,6 +17,7 @@ import discord
 import cv2
 import numpy as np
 from packaging import version
+from config_paths import project_root, resolve_project_path
 
 DEVELOPER_API_BASE_URL = "https://developer.brawlstars.com/api/"
 _brawl_stars_api_refresh_done = False
@@ -23,22 +25,6 @@ _brawl_stars_api_refresh_signature = None
 _brawler_name_aliases = None
 BRAWL_STARS_API_CONFIG_PATH = "cfg/brawl_stars_api.toml"
 LOCAL_BRAWL_STARS_API_CONFIG_PATH = "cfg/brawl_stars_api.local.toml"
-
-
-def project_root():
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(os.path.abspath(sys.executable))
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-def resolve_project_path(file_path):
-    file_path = os.fspath(file_path)
-    if os.path.isabs(file_path):
-        return file_path
-    normalized = file_path.replace("\\", "/")
-    if normalized.startswith("./"):
-        normalized = normalized[2:]
-    return os.path.join(project_root(), normalized)
 
 
 def _config_bool(value, default=False):
@@ -49,17 +35,34 @@ def _config_bool(value, default=False):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-def _developer_api_post(session, endpoint, payload, timeout):
-    response = session.post(
-        DEVELOPER_API_BASE_URL + endpoint,
-        json=payload,
-        timeout=timeout,
-        headers={
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://developer.brawlstars.com",
-            "Referer": "https://developer.brawlstars.com/",
-        },
-    )
+def _developer_api_post(session, endpoint, payload, timeout, attempts=1):
+    last_error = None
+    for attempt in range(max(1, int(attempts))):
+        try:
+            response = session.post(
+                DEVELOPER_API_BASE_URL + endpoint,
+                json=payload,
+                timeout=timeout,
+                headers={
+                    "Accept": "application/json, text/plain, */*",
+                    "Origin": "https://developer.brawlstars.com",
+                    "Referer": "https://developer.brawlstars.com/",
+                },
+            )
+            break
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+            last_error = exc
+            if attempt + 1 >= max(1, int(attempts)):
+                raise RuntimeError(
+                    "Brawl Stars developer portal timed out while creating the API token. "
+                    "Your config can be correct and this can still happen when developer.brawlstars.com is slow, "
+                    "blocked by the network, or unreachable from this PC. Try again, use another network/VPN, "
+                    "or create api_token manually for the current public IP."
+                ) from exc
+            time.sleep(1.0 + attempt)
+    else:
+        raise RuntimeError(f"Brawl Stars developer portal request failed: {last_error}")
+
     if response.status_code == 200:
         try:
             return response.json()
@@ -178,6 +181,7 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
         )
 
     timeout = int(config.get("timeout_seconds", 15))
+    developer_timeout = max(timeout, int(config.get("developer_timeout_seconds", 45) or 45))
     key_name_prefix = str(config.get("key_name_prefix", "PylaAi-XXZ Auto")).strip() or "PylaAi-XXZ Auto"
     delete_old_auto_tokens = _config_bool(config.get("delete_old_auto_tokens"), True)
     delete_all_tokens = _config_bool(config.get("delete_all_tokens"), False)
@@ -187,9 +191,9 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
     last_session_error = None
     for attempt in range(2):
         session = requests.Session()
-        _developer_api_post(session, "login", {"email": email, "password": password}, timeout)
+        _developer_api_post(session, "login", {"email": email, "password": password}, developer_timeout, attempts=3)
         try:
-            account = _developer_api_post(session, "account/load", {}, timeout)
+            account = _developer_api_post(session, "account/load", {}, developer_timeout, attempts=3)
             break
         except RuntimeError as e:
             last_session_error = e
@@ -202,14 +206,14 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
     developer = account.get("developer", {})
     scopes = developer.get("allowedScopes") or ["brawlstars"]
 
-    existing_keys = _developer_api_post(session, "apikey/list", {}, timeout).get("keys", [])
+    existing_keys = _developer_api_post(session, "apikey/list", {}, developer_timeout, attempts=3).get("keys", [])
     if delete_all_tokens or delete_old_auto_tokens:
         for api_key in existing_keys:
             key_name = str(api_key.get("name", ""))
             if delete_all_tokens or key_name.startswith(key_name_prefix):
                 key_id = api_key.get("id")
                 if key_id:
-                    _developer_api_post(session, "apikey/revoke", {"id": key_id}, timeout)
+                    _developer_api_post(session, "apikey/revoke", {"id": key_id}, developer_timeout, attempts=2)
 
     key_name = f"{key_name_prefix} {time.strftime('%Y-%m-%d %H:%M:%S')}"
     description = str(config.get("key_description", "Auto-generated by PylaAi-XXZ for the current public IP."))
@@ -219,11 +223,11 @@ def refresh_brawl_stars_api_token_if_enabled(config, file_path="cfg/brawl_stars_
         "cidrRanges": [public_ip],
         "scopes": scopes,
     }
-    created = _developer_api_post(session, "apikey/create", create_payload, timeout)
+    created = _developer_api_post(session, "apikey/create", create_payload, developer_timeout)
 
     new_token = _extract_api_token(created.get("key") or created.get("token"))
     if not new_token:
-        refreshed_keys = _developer_api_post(session, "apikey/list", {}, timeout).get("keys", [])
+        refreshed_keys = _developer_api_post(session, "apikey/list", {}, developer_timeout, attempts=3).get("keys", [])
         matching_keys = [api_key for api_key in refreshed_keys if api_key.get("name") == key_name]
         if matching_keys:
             new_token = _extract_api_token(matching_keys[0].get("key") or matching_keys[0].get("token"))
@@ -252,12 +256,46 @@ class DefaultEasyOCR:
 
 cached_toml = {}
 
+
+def _backup_invalid_toml(file_path, error):
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = f"{file_path}.invalid-{timestamp}"
+        with open(file_path, "rb") as source, open(backup_path, "wb") as target:
+            target.write(source.read())
+        print(f"Invalid TOML in {file_path}: {error}. Backed it up to {backup_path} and continuing with defaults.")
+        return backup_path
+    except Exception as backup_error:
+        print(f"Invalid TOML in {file_path}: {error}. Could not create backup: {backup_error}")
+        return None
+
+
 def load_toml_as_dict(file_path):
     resolved_file_path = resolve_project_path(file_path)
     if resolved_file_path not in cached_toml:
         if os.path.exists(resolved_file_path):
-            with open(resolved_file_path, 'r', encoding='utf-8-sig') as f:
-                cached_toml[resolved_file_path] = toml.load(f)
+            try:
+                with open(resolved_file_path, 'r', encoding='utf-8-sig') as f:
+                    cached_toml[resolved_file_path] = toml.load(f)
+            except toml.TomlDecodeError as error:
+                runtime_generated = {
+                    resolve_project_path("cfg/match_history.toml"),
+                    resolve_project_path("cfg/telegram_chats.toml"),
+                    resolve_project_path("cfg/telegram_config.local.toml"),
+                    resolve_project_path("cfg/brawl_stars_api.local.toml"),
+                    resolve_project_path("cfg/instances.toml"),
+                }
+                runtime_names = {
+                    "match_history.toml",
+                    "telegram_chats.toml",
+                    "telegram_config.local.toml",
+                    "brawl_stars_api.local.toml",
+                    "instances.toml",
+                }
+                if resolved_file_path not in runtime_generated and os.path.basename(resolved_file_path) not in runtime_names:
+                    raise
+                _backup_invalid_toml(resolved_file_path, error)
+                cached_toml[resolved_file_path] = {}
         else:
             cached_toml[resolved_file_path] = {}
     return cached_toml[resolved_file_path]
@@ -324,8 +362,20 @@ def save_brawler_data(data):
     """
     Save the given data to a json file. As a list of dictionaries.
     """
-    with open("latest_brawler_data.json", 'w') as f:
+    path = brawler_data_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
         json.dump(data, f, indent=4)
+
+
+def brawler_data_file_path():
+    try:
+        from gui.instance_config import get_queue_path
+
+        path = get_queue_path()
+    except Exception:
+        path = "latest_brawler_data.json"
+    return resolve_project_path(path)
 
 
 def normalize_brawler_name(name):

@@ -1,18 +1,16 @@
 import json
 from pathlib import Path
 
-import toml
+from utils import load_toml_as_dict as safe_load_toml_as_dict
+from utils import save_dict_as_toml as safe_save_dict_as_toml
 
 
 def load_toml_as_dict(path):
-    if not Path(path).exists():
-        return {}
-    return toml.load(path)
+    return safe_load_toml_as_dict(path)
 
 
 def save_dict_as_toml(data, path):
-    with open(path, "w", encoding="utf-8") as handle:
-        toml.dump(data, handle)
+    safe_save_dict_as_toml(data, path)
 
 
 def _to_bool(value):
@@ -47,6 +45,13 @@ def _coerce(value, kind):
     if kind == "chat_ids":
         return _text_to_chat_ids(value)
     return str(value)
+
+
+def _safe_int(value, default=0):
+    try:
+        return int(float(str(value).strip() or default))
+    except (TypeError, ValueError):
+        return default
 
 
 class HubStateStore:
@@ -107,6 +112,7 @@ class HubStateStore:
         "developer_password": "str",
         "api_token": "str",
         "timeout_seconds": "int",
+        "developer_timeout_seconds": "int",
         "public_ip_service": "str",
         "key_name_prefix": "str",
         "delete_old_auto_tokens": "bool",
@@ -210,6 +216,7 @@ class HubStateStore:
 
         self.brawl_stars_api_config.setdefault("player_tag", "#YOURTAG")
         self.brawl_stars_api_config.setdefault("timeout_seconds", 15)
+        self.brawl_stars_api_config.setdefault("developer_timeout_seconds", 45)
         self.brawl_stars_api_config.setdefault("auto_refresh_token", True)
         self.brawl_stars_api_config.setdefault("developer_email", "")
         self.brawl_stars_api_config.setdefault("developer_password", "")
@@ -245,6 +252,7 @@ class HubStateStore:
             "api": dict(self.brawl_stars_api_config),
             "timers": {key: self.time_tresholds.get(key) for key in self.TIMER_FIELDS},
             "history": self._history_state(),
+            "instances": self._instances_state(),
         })
         return state
 
@@ -276,21 +284,46 @@ class HubStateStore:
         for brawler, stats in self.match_history.items():
             if brawler == "total" or not isinstance(stats, dict):
                 continue
-            wins = int(stats.get("victory", 0) or 0)
-            losses = int(stats.get("defeat", 0) or 0)
-            games = wins + losses
+            wins = _safe_int(stats.get("victory", 0))
+            losses = _safe_int(stats.get("defeat", 0))
+            draws = _safe_int(stats.get("draw", 0))
+            games = wins + losses + draws
             win_rate = round((wins / games) * 100, 1) if games else 0
             icon_path = Path("api") / "assets" / "brawler_icons" / f"{brawler}.png"
             items.append({
                 "brawler": str(brawler),
                 "victory": wins,
                 "defeat": losses,
+                "draw": draws,
                 "games": games,
                 "winRate": win_rate,
                 "icon": icon_path.resolve().as_uri() if icon_path.exists() else "",
             })
         items.sort(key=lambda item: (-item["games"], item["brawler"]))
         return items
+
+    def _instances_state(self):
+        try:
+            from gui.instance_config import (
+                ensure_multi_instance_profiles,
+                is_multi_instance_enabled,
+                list_available_emulator_instances,
+            )
+            from gui.instance_registry import list_instances
+
+            ensure_multi_instance_profiles()
+            return {
+                "enabled": is_multi_instance_enabled(),
+                "items": list_instances(),
+                "available": list_available_emulator_instances(),
+            }
+        except Exception as exc:
+            return {
+                "enabled": False,
+                "items": [],
+                "available": [],
+                "error": str(exc),
+            }
 
     def update_config(self, section, key, value):
         if section == "settings":

@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQuick.Window
@@ -21,6 +21,8 @@ ApplicationWindow {
     property string statusText: ""
     property bool statusOk: true
     property string performanceProfile: "balanced"
+    property string newInstanceEmulator: "ldplayer"
+    property string newInstanceName: ""
 
     function reloadState() {
         if (hubBridge) {
@@ -165,7 +167,7 @@ ApplicationWindow {
         property bool hovered: false
         signal clicked()
 
-        width: 108
+        width: 94
         height: 30
         radius: 7
         color: selected ? theme.panel3 : (hovered ? "#211f1a" : "transparent")
@@ -493,7 +495,7 @@ ApplicationWindow {
                 Layout.preferredWidth: 74
                 Layout.preferredHeight: 34
                 value: sliderBox.format(control.value)
-                onSaved: sliderBox.saved(value)
+                onSaved: function(value) { sliderBox.saved(value) }
             }
         }
     }
@@ -753,7 +755,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 2
                         Repeater {
-                            model: ["Overview", "Settings", "Discord", "Telegram", "API", "Timers", "Match History"]
+                            model: ["Overview", "Settings", "Discord", "Telegram", "API", "Instances", "Timers", "Match History"]
                             delegate: NavButton {
                                 label: modelData
                                 onClicked: root.activeTab = modelData
@@ -784,10 +786,9 @@ ApplicationWindow {
                             SectionTitle { title: "GAME MODE" }
                             GridLayout {
                                 Layout.fillWidth: true
-                                columns: 2
+                                columns: 1
                                 columnSpacing: 12
                                 rowSpacing: 12
-                                OptionCard { Layout.fillWidth: true; label: "Brawl Ball"; locked: true }
                                 OptionCard {
                                     Layout.fillWidth: true
                                     label: "Showdown Trio"
@@ -854,23 +855,23 @@ ApplicationWindow {
                         title: "DETECTION"
                         FieldRow {
                             label: "Wall Confidence"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "wall_detection_confidence")); from: 0.1; to: 1.0; onSaved: root.saveValue("settings", "wall_detection_confidence", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "wall_detection_confidence")); from: 0.1; to: 1.0; onSaved: function(value) { root.saveValue("settings", "wall_detection_confidence", value) } }
                         }
                         FieldRow {
                             label: "Player Confidence"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "entity_detection_confidence")); from: 0.1; to: 1.0; onSaved: root.saveValue("settings", "entity_detection_confidence", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "entity_detection_confidence")); from: 0.1; to: 1.0; onSaved: function(value) { root.saveValue("settings", "entity_detection_confidence", value) } }
                         }
                         FieldRow {
                             label: "Super Pixels"
-                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "super_pixels_minimum")); onSaved: root.saveValue("settings", "super_pixels_minimum", value) }
+                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "super_pixels_minimum")); onSaved: function(value) { root.saveValue("settings", "super_pixels_minimum", value) } }
                         }
                         FieldRow {
                             label: "Gadget Pixels"
-                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "gadget_pixels_minimum")); onSaved: root.saveValue("settings", "gadget_pixels_minimum", value) }
+                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "gadget_pixels_minimum")); onSaved: function(value) { root.saveValue("settings", "gadget_pixels_minimum", value) } }
                         }
                         FieldRow {
                             label: "Hypercharge Pixels"
-                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "hypercharge_pixels_minimum")); onSaved: root.saveValue("settings", "hypercharge_pixels_minimum", value) }
+                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "hypercharge_pixels_minimum")); onSaved: function(value) { root.saveValue("settings", "hypercharge_pixels_minimum", value) } }
                         }
                     }
 
@@ -878,15 +879,15 @@ ApplicationWindow {
                         title: "BEHAVIOR"
                         FieldRow {
                             label: "Minimum Movement Delay"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "minimum_movement_delay")); from: 0.05; to: 3.0; onSaved: root.saveValue("settings", "minimum_movement_delay", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "minimum_movement_delay")); from: 0.05; to: 3.0; onSaved: function(value) { root.saveValue("settings", "minimum_movement_delay", value) } }
                         }
                         FieldRow {
                             label: "Unstuck Delay"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "unstuck_movement_delay")); from: 0.5; to: 10.0; onSaved: root.saveValue("settings", "unstuck_movement_delay", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "unstuck_movement_delay")); from: 0.5; to: 10.0; onSaved: function(value) { root.saveValue("settings", "unstuck_movement_delay", value) } }
                         }
                         FieldRow {
                             label: "Unstuck Duration"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "unstuck_movement_hold_time")); from: 0.2; to: 5.0; onSaved: root.saveValue("settings", "unstuck_movement_hold_time", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "unstuck_movement_hold_time")); from: 0.2; to: 5.0; onSaved: function(value) { root.saveValue("settings", "unstuck_movement_hold_time", value) } }
                         }
                         FieldRow {
                             label: "After Round"
@@ -898,19 +899,19 @@ ApplicationWindow {
                         }
                         FieldRow {
                             label: "Longpress Star Drop"
-                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "long_press_star_drop"); onToggled: root.saveValue("settings", "long_press_star_drop", value) } }
+                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "long_press_star_drop"); onToggled: function(value) { root.saveValue("settings", "long_press_star_drop", value) } } }
                         }
                         FieldRow {
                             label: "Terminal Logging"
-                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "terminal_logging"); onToggled: root.saveValue("settings", "terminal_logging", value) } }
+                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "terminal_logging"); onToggled: function(value) { root.saveValue("settings", "terminal_logging", value) } } }
                         }
                         FieldRow {
                             label: "Debug Screen"
-                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "visual_debug"); onToggled: root.saveValue("settings", "visual_debug", value) } }
+                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "visual_debug"); onToggled: function(value) { root.saveValue("settings", "visual_debug", value) } } }
                         }
                         FieldRow {
                             label: "Capture Vision Frames"
-                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "capture_bad_vision_frames"); onToggled: root.saveValue("settings", "capture_bad_vision_frames", value) } }
+                            CenterRow { ToggleSwitch { checked: root.boolValue("settings", "capture_bad_vision_frames"); onToggled: function(value) { root.saveValue("settings", "capture_bad_vision_frames", value) } } }
                         }
                     }
 
@@ -922,31 +923,31 @@ ApplicationWindow {
                         }
                         FieldRow {
                             label: "DirectML GPU ID"
-                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "directml_device_id")); onSaved: root.saveValue("settings", "directml_device_id", value) }
+                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "directml_device_id")); onSaved: function(value) { root.saveValue("settings", "directml_device_id", value) } }
                         }
                         FieldRow {
                             label: "Max IPS"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "max_ips")); from: 0; to: 120; integer: true; onSaved: root.saveValue("settings", "max_ips", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "max_ips")); from: 0; to: 120; integer: true; onSaved: function(value) { root.saveValue("settings", "max_ips", value) } }
                         }
                         FieldRow {
                             label: "Scrcpy Max FPS"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "scrcpy_max_fps")); from: 5; to: 120; integer: true; onSaved: root.saveValue("settings", "scrcpy_max_fps", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "scrcpy_max_fps")); from: 5; to: 120; integer: true; onSaved: function(value) { root.saveValue("settings", "scrcpy_max_fps", value) } }
                         }
                         FieldRow {
                             label: "Used Threads"
-                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "used_threads")); onSaved: root.saveValue("settings", "used_threads", value) }
+                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "used_threads")); onSaved: function(value) { root.saveValue("settings", "used_threads", value) } }
                         }
                         FieldRow {
                             label: "Trophy Multiplier"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "trophies_multiplier")); from: 1; to: 10; integer: true; onSaved: root.saveValue("settings", "trophies_multiplier", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "trophies_multiplier")); from: 1; to: 10; integer: true; onSaved: function(value) { root.saveValue("settings", "trophies_multiplier", value) } }
                         }
                         FieldRow {
                             label: "OCR Scale"
-                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "ocr_scale_down_factor")); from: 0.1; to: 1.0; onSaved: root.saveValue("settings", "ocr_scale_down_factor", value) }
+                            NumericSlider { anchors.fill: parent; value: String(root.value("settings", "ocr_scale_down_factor")); from: 0.1; to: 1.0; onSaved: function(value) { root.saveValue("settings", "ocr_scale_down_factor", value) } }
                         }
                         FieldRow {
                             label: "Current Playstyle"
-                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "current_playstyle")); onSaved: root.saveValue("settings", "current_playstyle", value) }
+                            ConfigInput { anchors.fill: parent; value: String(root.value("settings", "current_playstyle")); onSaved: function(value) { root.saveValue("settings", "current_playstyle", value) } }
                         }
                         FieldRow {
                             label: "Performance Profile"
@@ -971,23 +972,23 @@ ApplicationWindow {
                     visible: root.activeTab === "Discord"
                     FormPanel {
                         title: "DISCORD NOTIFICATIONS"
-                        FieldRow { label: "Webhook URL"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "webhook_url")); secret: true; onSaved: root.saveValue("discord", "webhook_url", value) } }
-                        FieldRow { label: "Discord ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_id")); onSaved: root.saveValue("discord", "discord_id", value) } }
-                        FieldRow { label: "Webhook Name"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "username")); onSaved: root.saveValue("discord", "username", value) } }
-                        FieldRow { label: "Send Match Summary"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "send_match_summary"); onToggled: root.saveValue("discord", "send_match_summary", value) } } }
-                        FieldRow { label: "Include Screenshots"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "include_screenshot"); onToggled: root.saveValue("discord", "include_screenshot", value) } } }
-                        FieldRow { label: "Ping When Stuck"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "ping_when_stuck"); onToggled: root.saveValue("discord", "ping_when_stuck", value) } } }
-                        FieldRow { label: "Ping On Target"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "ping_when_target_is_reached"); onToggled: root.saveValue("discord", "ping_when_target_is_reached", value) } } }
-                        FieldRow { label: "Every X Matches"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "ping_every_x_match")); onSaved: root.saveValue("discord", "ping_every_x_match", value) } }
-                        FieldRow { label: "Every X Minutes"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "ping_every_x_minutes")); onSaved: root.saveValue("discord", "ping_every_x_minutes", value) } }
+                        FieldRow { label: "Webhook URL"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "webhook_url")); secret: true; onSaved: function(value) { root.saveValue("discord", "webhook_url", value) } } }
+                        FieldRow { label: "Discord ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_id")); onSaved: function(value) { root.saveValue("discord", "discord_id", value) } } }
+                        FieldRow { label: "Webhook Name"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "username")); onSaved: function(value) { root.saveValue("discord", "username", value) } } }
+                        FieldRow { label: "Send Match Summary"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "send_match_summary"); onToggled: function(value) { root.saveValue("discord", "send_match_summary", value) } } } }
+                        FieldRow { label: "Include Screenshots"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "include_screenshot"); onToggled: function(value) { root.saveValue("discord", "include_screenshot", value) } } } }
+                        FieldRow { label: "Ping When Stuck"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "ping_when_stuck"); onToggled: function(value) { root.saveValue("discord", "ping_when_stuck", value) } } } }
+                        FieldRow { label: "Ping On Target"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "ping_when_target_is_reached"); onToggled: function(value) { root.saveValue("discord", "ping_when_target_is_reached", value) } } } }
+                        FieldRow { label: "Every X Matches"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "ping_every_x_match")); onSaved: function(value) { root.saveValue("discord", "ping_every_x_match", value) } } }
+                        FieldRow { label: "Every X Minutes"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "ping_every_x_minutes")); onSaved: function(value) { root.saveValue("discord", "ping_every_x_minutes", value) } } }
                     }
                     FormPanel {
                         title: "REMOTE CONTROL"
-                        FieldRow { label: "Enable Discord Control"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "discord_control_enabled"); onToggled: root.saveValue("discord", "discord_control_enabled", value) } } }
-                        FieldRow { label: "Bot Token"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_bot_token")); secret: true; onSaved: root.saveValue("discord", "discord_bot_token", value) } }
-                        FieldRow { label: "Allowed User ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_control_user_id")); onSaved: root.saveValue("discord", "discord_control_user_id", value) } }
-                        FieldRow { label: "Allowed Channel ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_control_channel_id")); onSaved: root.saveValue("discord", "discord_control_channel_id", value) } }
-                        FieldRow { label: "Guild ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_control_guild_id")); onSaved: root.saveValue("discord", "discord_control_guild_id", value) } }
+                        FieldRow { label: "Enable Discord Control"; CenterRow { ToggleSwitch { checked: root.boolValue("discord", "discord_control_enabled"); onToggled: function(value) { root.saveValue("discord", "discord_control_enabled", value) } } } }
+                        FieldRow { label: "Bot Token"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_bot_token")); secret: true; onSaved: function(value) { root.saveValue("discord", "discord_bot_token", value) } } }
+                        FieldRow { label: "Allowed User ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_control_user_id")); onSaved: function(value) { root.saveValue("discord", "discord_control_user_id", value) } } }
+                        FieldRow { label: "Allowed Channel ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_control_channel_id")); onSaved: function(value) { root.saveValue("discord", "discord_control_channel_id", value) } } }
+                        FieldRow { label: "Guild ID"; ConfigInput { anchors.fill: parent; value: String(root.value("discord", "discord_control_guild_id")); onSaved: function(value) { root.saveValue("discord", "discord_control_guild_id", value) } } }
                     }
                     ActionRow {
                         HubButton { label: "Send Discord Test"; onClicked: root.runAction("discord-test") }
@@ -1001,14 +1002,14 @@ ApplicationWindow {
                     visible: root.activeTab === "Telegram"
                     FormPanel {
                         title: "TELEGRAM BOT"
-                        FieldRow { label: "Enable Telegram"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "enabled"); onToggled: root.saveValue("telegram", "enabled", value) } } }
-                        FieldRow { label: "Bot Token"; ConfigInput { anchors.fill: parent; value: String(root.value("telegram", "bot_token")); secret: true; onSaved: root.saveValue("telegram", "bot_token", value) } }
-                        FieldRow { label: "Notification Chat IDs"; ConfigInput { anchors.fill: parent; value: String(root.value("telegram", "notification_chat_ids")); onSaved: root.saveValue("telegram", "notification_chat_ids", value) } }
-                        FieldRow { label: "Send Match Summary"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "send_match_summary"); onToggled: root.saveValue("telegram", "send_match_summary", value) } } }
-                        FieldRow { label: "Include Screenshots"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "include_screenshot"); onToggled: root.saveValue("telegram", "include_screenshot", value) } } }
-                        FieldRow { label: "Multiple Chats"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "allow_multiple_notification_chat_ids"); onToggled: root.saveValue("telegram", "allow_multiple_notification_chat_ids", value) } } }
-                        FieldRow { label: "Remote Control"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "remote_control_enabled"); onToggled: root.saveValue("telegram", "remote_control_enabled", value) } } }
-                        FieldRow { label: "Poll Timeout"; ConfigInput { anchors.fill: parent; value: String(root.value("telegram", "poll_timeout_seconds")); onSaved: root.saveValue("telegram", "poll_timeout_seconds", value) } }
+                        FieldRow { label: "Enable Telegram"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "enabled"); onToggled: function(value) { root.saveValue("telegram", "enabled", value) } } } }
+                        FieldRow { label: "Bot Token"; ConfigInput { anchors.fill: parent; value: String(root.value("telegram", "bot_token")); secret: true; onSaved: function(value) { root.saveValue("telegram", "bot_token", value) } } }
+                        FieldRow { label: "Notification Chat IDs"; ConfigInput { anchors.fill: parent; value: String(root.value("telegram", "notification_chat_ids")); onSaved: function(value) { root.saveValue("telegram", "notification_chat_ids", value) } } }
+                        FieldRow { label: "Send Match Summary"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "send_match_summary"); onToggled: function(value) { root.saveValue("telegram", "send_match_summary", value) } } } }
+                        FieldRow { label: "Include Screenshots"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "include_screenshot"); onToggled: function(value) { root.saveValue("telegram", "include_screenshot", value) } } } }
+                        FieldRow { label: "Multiple Chats"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "allow_multiple_notification_chat_ids"); onToggled: function(value) { root.saveValue("telegram", "allow_multiple_notification_chat_ids", value) } } } }
+                        FieldRow { label: "Remote Control"; CenterRow { ToggleSwitch { checked: root.boolValue("telegram", "remote_control_enabled"); onToggled: function(value) { root.saveValue("telegram", "remote_control_enabled", value) } } } }
+                        FieldRow { label: "Poll Timeout"; ConfigInput { anchors.fill: parent; value: String(root.value("telegram", "poll_timeout_seconds")); onSaved: function(value) { root.saveValue("telegram", "poll_timeout_seconds", value) } } }
                     }
                     ActionRow {
                         HubButton { label: "Find Chats"; onClicked: root.runAction("telegram-find-chats") }
@@ -1022,15 +1023,16 @@ ApplicationWindow {
                     visible: root.activeTab === "API"
                     FormPanel {
                         title: "BRAWL STARS API"
-                        FieldRow { label: "Player Tag"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "player_tag")); onSaved: root.saveValue("api", "player_tag", value) } }
-                        FieldRow { label: "Auto Refresh Token"; CenterRow { ToggleSwitch { checked: root.boolValue("api", "auto_refresh_token"); onToggled: root.saveValue("api", "auto_refresh_token", value) } } }
-                        FieldRow { label: "Developer Email"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "developer_email")); onSaved: root.saveValue("api", "developer_email", value) } }
-                        FieldRow { label: "Developer Password"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "developer_password")); secret: true; onSaved: root.saveValue("api", "developer_password", value) } }
-                        FieldRow { label: "API Token"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "api_token")); secret: true; onSaved: root.saveValue("api", "api_token", value) } }
-                        FieldRow { label: "Timeout Seconds"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "timeout_seconds")); onSaved: root.saveValue("api", "timeout_seconds", value) } }
-                        FieldRow { label: "Public IP Service"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "public_ip_service")); onSaved: root.saveValue("api", "public_ip_service", value) } }
-                        FieldRow { label: "Key Name Prefix"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "key_name_prefix")); onSaved: root.saveValue("api", "key_name_prefix", value) } }
-                        FieldRow { label: "Delete Old Tokens"; CenterRow { ToggleSwitch { checked: root.boolValue("api", "delete_old_auto_tokens"); onToggled: root.saveValue("api", "delete_old_auto_tokens", value) } } }
+                        FieldRow { label: "Player Tag"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "player_tag")); onSaved: function(value) { root.saveValue("api", "player_tag", value) } } }
+                        FieldRow { label: "Auto Refresh Token"; CenterRow { ToggleSwitch { checked: root.boolValue("api", "auto_refresh_token"); onToggled: function(value) { root.saveValue("api", "auto_refresh_token", value) } } } }
+                        FieldRow { label: "Developer Email"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "developer_email")); onSaved: function(value) { root.saveValue("api", "developer_email", value) } } }
+                        FieldRow { label: "Developer Password"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "developer_password")); secret: true; onSaved: function(value) { root.saveValue("api", "developer_password", value) } } }
+                        FieldRow { label: "API Token"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "api_token")); secret: true; onSaved: function(value) { root.saveValue("api", "api_token", value) } } }
+                        FieldRow { label: "Timeout Seconds"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "timeout_seconds")); onSaved: function(value) { root.saveValue("api", "timeout_seconds", value) } } }
+                        FieldRow { label: "Developer Timeout"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "developer_timeout_seconds")); onSaved: function(value) { root.saveValue("api", "developer_timeout_seconds", value) } } }
+                        FieldRow { label: "Public IP Service"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "public_ip_service")); onSaved: function(value) { root.saveValue("api", "public_ip_service", value) } } }
+                        FieldRow { label: "Key Name Prefix"; ConfigInput { anchors.fill: parent; value: String(root.value("api", "key_name_prefix")); onSaved: function(value) { root.saveValue("api", "key_name_prefix", value) } } }
+                        FieldRow { label: "Delete Old Tokens"; CenterRow { ToggleSwitch { checked: root.boolValue("api", "delete_old_auto_tokens"); onToggled: function(value) { root.saveValue("api", "delete_old_auto_tokens", value) } } } }
                     }
                     ActionRow {
                         HubButton { label: "Test API Config"; onClicked: root.runAction("api-test") }
@@ -1040,18 +1042,157 @@ ApplicationWindow {
                 }
 
                 TabPage {
+                    visible: root.activeTab === "Instances"
+                    FormPanel {
+                        title: "ADD INSTANCE"
+                        FieldRow {
+                            label: "Emulator"
+                            Row {
+                                spacing: 8
+                                ChoicePill { label: "LDPlayer"; selected: root.newInstanceEmulator === "ldplayer"; onClicked: root.newInstanceEmulator = "ldplayer" }
+                                ChoicePill { label: "MuMu"; selected: root.newInstanceEmulator === "mumu"; onClicked: root.newInstanceEmulator = "mumu" }
+                            }
+                        }
+                        FieldRow {
+                            label: "Instance Name"
+                            ConfigInput {
+                                anchors.fill: parent
+                                value: root.newInstanceName
+                                onSaved: function(value) { root.newInstanceName = value }
+                            }
+                        }
+                        FieldRow {
+                            label: "Detected"
+                            Flow {
+                                width: parent.width
+                                spacing: 8
+                                Repeater {
+                                    model: (root.hubState.instances && root.hubState.instances.available) ? root.hubState.instances.available : []
+                                    delegate: ChoicePill {
+                                        label: modelData.display_emulator + " " + modelData.index + " - " + modelData.name
+                                        selected: root.newInstanceEmulator === modelData.emulator && root.newInstanceName === modelData.name
+                                        onClicked: {
+                                            root.newInstanceEmulator = modelData.emulator
+                                            root.newInstanceName = modelData.name
+                                        }
+                                    }
+                                }
+                                Text {
+                                    visible: !root.hubState.instances || !root.hubState.instances.available || root.hubState.instances.available.length === 0
+                                    text: "No emulator instances found. Open LDPlayer/MuMu manager or type index/ADB serial manually."
+                                    color: theme.faint
+                                    font.pixelSize: 11
+                                    width: parent.width
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+                        FieldRow {
+                            label: "Actions"
+                            Row {
+                                spacing: 8
+                                HubButton {
+                                    label: "Add Instance"
+                                    onClicked: root.runAction("instance-add-named:" + root.newInstanceEmulator + ":" + encodeURIComponent(root.newInstanceName))
+                                }
+                                HubButton {
+                                    label: "Use Current"
+                                    secondary: true
+                                    onClicked: root.runAction("instance-create-default")
+                                }
+                            }
+                        }
+                    }
+                    ActionRow {
+                        HubButton { label: "Fetch Instances"; secondary: true; onClicked: root.reloadState() }
+                    }
+                    SectionTitle {
+                        title: "CONFIGURED INSTANCES"
+                        subtitle: "Start and stop each emulator profile from here."
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Repeater {
+                            model: (root.hubState.instances && root.hubState.instances.items) ? root.hubState.instances.items : []
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                height: 82
+                                radius: 10
+                                color: modelData.running ? "#182318" : theme.panel
+                                border.width: 1
+                                border.color: modelData.running ? "#2b6b37" : theme.borderSoft
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 12
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 3
+                                        Text {
+                                            text: modelData.name + "  (" + modelData.id + ")"
+                                            color: theme.text
+                                            font.pixelSize: 14
+                                            font.weight: Font.DemiBold
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: modelData.emulator + "  |  ADB " + modelData.emulator_port + "  |  " + (modelData.running ? "running" : "stopped")
+                                            color: modelData.running ? theme.ok : theme.faint
+                                            font.pixelSize: 11
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: modelData.brawler ? ("Brawler: " + modelData.brawler + "  Target: " + modelData.target) : "Queue: " + modelData.queue_path
+                                            color: theme.faint
+                                            font.pixelSize: 11
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                    HubButton {
+                                        label: modelData.running ? "Stop" : "Start"
+                                        secondary: modelData.running
+                                        onClicked: root.runAction((modelData.running ? "instance-stop:" : "instance-start:") + modelData.id)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        visible: !root.hubState.instances || !root.hubState.instances.items || root.hubState.instances.items.length === 0
+                        text: "No instances configured yet."
+                        color: theme.faint
+                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        visible: !!(root.hubState.instances && root.hubState.instances.error)
+                        text: root.hubState.instances.error || ""
+                        color: "#ff6b5f"
+                        font.pixelSize: 11
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+                    Text { text: root.statusText; color: root.statusOk ? theme.muted : "#ff6b5f"; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                }
+
+                TabPage {
                     visible: root.activeTab === "Timers"
                     FormPanel {
                         title: "TIMERS"
-                        FieldRow { label: "Super Delay"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "super")); from: 0.05; to: 10; onSaved: root.saveValue("timers", "super", value) } }
-                        FieldRow { label: "Hypercharge Delay"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "hypercharge")); from: 0.05; to: 10; onSaved: root.saveValue("timers", "hypercharge", value) } }
-                        FieldRow { label: "Gadget Delay"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "gadget")); from: 0.05; to: 10; onSaved: root.saveValue("timers", "gadget", value) } }
-                        FieldRow { label: "Wall Detection"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "wall_detection")); from: 0.05; to: 10; onSaved: root.saveValue("timers", "wall_detection", value) } }
-                        FieldRow { label: "No Detection Proceed"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "no_detection_proceed")); from: 0.1; to: 20; onSaved: root.saveValue("timers", "no_detection_proceed", value) } }
-                        FieldRow { label: "Low IPS Recovery"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_recovery_seconds")); from: 5; to: 90; integer: true; onSaved: root.saveValue("timers", "low_ips_recovery_seconds", value) } }
-                        FieldRow { label: "Low IPS Cooldown"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_recovery_cooldown")); from: 5; to: 90; integer: true; onSaved: root.saveValue("timers", "low_ips_recovery_cooldown", value) } }
-                        FieldRow { label: "App Restart Attempt"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_app_restart_after")); from: 1; to: 6; integer: true; onSaved: root.saveValue("timers", "low_ips_app_restart_after", value) } }
-                        FieldRow { label: "Emulator Restart Attempt"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_emulator_restart_after")); from: 1; to: 10; integer: true; onSaved: root.saveValue("timers", "low_ips_emulator_restart_after", value) } }
+                        FieldRow { label: "Super Delay"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "super")); from: 0.05; to: 10; onSaved: function(value) { root.saveValue("timers", "super", value) } } }
+                        FieldRow { label: "Hypercharge Delay"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "hypercharge")); from: 0.05; to: 10; onSaved: function(value) { root.saveValue("timers", "hypercharge", value) } } }
+                        FieldRow { label: "Gadget Delay"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "gadget")); from: 0.05; to: 10; onSaved: function(value) { root.saveValue("timers", "gadget", value) } } }
+                        FieldRow { label: "Wall Detection"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "wall_detection")); from: 0.05; to: 10; onSaved: function(value) { root.saveValue("timers", "wall_detection", value) } } }
+                        FieldRow { label: "No Detection Proceed"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "no_detection_proceed")); from: 0.1; to: 20; onSaved: function(value) { root.saveValue("timers", "no_detection_proceed", value) } } }
+                        FieldRow { label: "Low IPS Recovery"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_recovery_seconds")); from: 5; to: 90; integer: true; onSaved: function(value) { root.saveValue("timers", "low_ips_recovery_seconds", value) } } }
+                        FieldRow { label: "Low IPS Cooldown"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_recovery_cooldown")); from: 5; to: 90; integer: true; onSaved: function(value) { root.saveValue("timers", "low_ips_recovery_cooldown", value) } } }
+                        FieldRow { label: "App Restart Attempt"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_app_restart_after")); from: 1; to: 6; integer: true; onSaved: function(value) { root.saveValue("timers", "low_ips_app_restart_after", value) } } }
+                        FieldRow { label: "Emulator Restart Attempt"; NumericSlider { anchors.fill: parent; value: String(root.value("timers", "low_ips_emulator_restart_after")); from: 1; to: 10; integer: true; onSaved: function(value) { root.saveValue("timers", "low_ips_emulator_restart_after", value) } } }
                     }
                 }
 

@@ -3,6 +3,7 @@
 
 player_tag = "#YOURTAG"
 timeout_seconds = 15
+developer_timeout_seconds = 45
 
 # Auto-refresh mode for changing public IPs.
 # When enabled, PylaAi-XXZ logs in to the official developer portal, gets your current public IP,

@@ -997,10 +997,18 @@ class SelectBrawler:
             self.start_bot()
         except Exception as e:
             print(f"Push All failed: {e}")
-            print(
-                f"Open {resolve_project_path('cfg/brawl_stars_api.toml')} and make sure player_tag, developer_email, "
-                "developer_password, and auto_refresh_token are set correctly."
-            )
+            error_text = str(e).lower()
+            if "timed out" in error_text or "timeout" in error_text or "httpsconnectionpool" in error_text:
+                print(
+                    "Your API config can be filled correctly; this error means the Brawl Stars developer/API "
+                    "website did not answer fast enough. Try again, use another network/VPN, or create api_token "
+                    "manually for the current public IP."
+                )
+            else:
+                print(
+                    f"Open {resolve_project_path('cfg/brawl_stars_api.toml')} and make sure player_tag, developer_email, "
+                    "developer_password, and auto_refresh_token are set correctly."
+                )
             if hidden_for_start:
                 try:
                     self.app.deiconify()

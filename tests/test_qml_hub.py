@@ -138,7 +138,7 @@ class QmlHubStateTests(unittest.TestCase):
         self.assertIn("component NumericSlider", qml)
         self.assertIn("Slider {", qml)
         self.assertIn('label: "Super Delay"', qml)
-        self.assertIn('onSaved: root.saveValue("timers", "super", value)', qml)
+        self.assertIn('onSaved: function(value) { root.saveValue("timers", "super", value) }', qml)
 
     def test_qml_settings_tab_has_complete_old_settings_blocks(self):
         qml = Path("gui/qml/PylaHub.qml").read_text(encoding="utf-8")
@@ -226,6 +226,14 @@ class QmlHubStateTests(unittest.TestCase):
         for action in re.findall(r'root\.runAction\("([^"]+)"', qml):
             if action == "profile-":
                 self.assertIn('if action.startswith("profile-"):', bridge)
+            elif action.startswith("instance-add:"):
+                self.assertIn('if action.startswith("instance-add:"):', bridge)
+            elif action.startswith("instance-add-named:"):
+                self.assertIn('if action.startswith("instance-add-named:"):', bridge)
+            elif action.startswith("instance-start:"):
+                self.assertIn('if action.startswith("instance-start:"):', bridge)
+            elif action.startswith("instance-stop:"):
+                self.assertIn('if action.startswith("instance-stop:"):', bridge)
             else:
                 self.assertIn(action, direct_handlers)
 
@@ -236,6 +244,17 @@ class QmlHubStateTests(unittest.TestCase):
         self.assertIn("def startPyla(self):", bridge)
         self.assertIn("onClicked: hubBridge.openDiscord()", qml)
         self.assertIn("onClicked: hubBridge.openPatreon()", qml)
+
+    def test_instances_page_fetches_and_selects_detected_instances(self):
+        qml = Path("gui/qml/PylaHub.qml").read_text(encoding="utf-8")
+        state = Path("gui/hub_state.py").read_text(encoding="utf-8")
+
+        self.assertIn('"available": list_available_emulator_instances()', state)
+        self.assertIn('label: "Detected"', qml)
+        self.assertIn("modelData.display_emulator", qml)
+        self.assertIn("root.newInstanceName = modelData.name", qml)
+        self.assertIn('label: "Fetch Instances"', qml)
+        self.assertIn("visible: !!(root.hubState.instances && root.hubState.instances.error)", qml)
 
     def test_qml_hub_is_primary_with_legacy_fallback(self):
         main_source = Path("main.py").read_text(encoding="utf-8")

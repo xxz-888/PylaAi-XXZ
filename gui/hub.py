@@ -180,6 +180,7 @@ class Hub:
 
         self.brawl_stars_api_config.setdefault("player_tag", "#YOURTAG")
         self.brawl_stars_api_config.setdefault("timeout_seconds", 15)
+        self.brawl_stars_api_config.setdefault("developer_timeout_seconds", 45)
         self.brawl_stars_api_config.setdefault("auto_refresh_token", True)
         self.brawl_stars_api_config.setdefault("developer_email", "")
         self.brawl_stars_api_config.setdefault("developer_password", "")
@@ -1737,6 +1738,7 @@ class Hub:
         create_api_entry("Developer Password:", "developer_password", str, width=360, show="*")
         create_api_entry("API Token:", "api_token", str, width=440, show="*")
         create_api_entry("Timeout Seconds:", "timeout_seconds", lambda s: 15 if s == "" else int(s), width=120)
+        create_api_entry("Developer Timeout Seconds:", "developer_timeout_seconds", lambda s: 45 if s == "" else int(s), width=120)
         create_api_entry("Public IP Service:", "public_ip_service", str, width=360)
         create_api_entry("Key Name Prefix:", "key_name_prefix", str, width=260)
         create_api_toggle("Delete Old Auto Tokens:", "delete_old_auto_tokens")
@@ -1984,7 +1986,7 @@ class Hub:
 
         icon_size = S(100)  # bigger icons
         for brawler, stats in self.match_history.items():
-            if brawler == "total":
+            if brawler == "total" or not isinstance(stats, dict):
                 continue
             icon_path = f"./api/assets/brawler_icons/{brawler}.png"
             if not os.path.exists(icon_path):
@@ -1993,12 +1995,25 @@ class Hub:
                 pil_img = Image.open(icon_path).resize((icon_size, icon_size))
                 icon_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(icon_size, icon_size))
 
-            total_games = stats["victory"] + stats["defeat"]
+            try:
+                wins = int(float(str(stats.get("victory", 0) or 0)))
+            except (TypeError, ValueError):
+                wins = 0
+            try:
+                defeats = int(float(str(stats.get("defeat", 0) or 0)))
+            except (TypeError, ValueError):
+                defeats = 0
+            try:
+                draws = int(float(str(stats.get("draw", 0) or 0)))
+            except (TypeError, ValueError):
+                draws = 0
+            total_games = wins + defeats + draws
             if total_games == 0:
                 wr = lr = dr = 0
             else:
-                wr = round(100 * stats["victory"] / total_games, 1)
-                lr = round(100 * stats["defeat"] / total_games, 1)
+                wr = round(100 * wins / total_games, 1)
+                lr = round(100 * defeats / total_games, 1)
+                dr = round(100 * draws / total_games, 1)
 
             cell_frame = ctk.CTkFrame(
                 scroll_frame,
