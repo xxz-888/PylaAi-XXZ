@@ -56,6 +56,25 @@ class DummyLobbyAutomation:
 
 
 class PushAllTargetSwitchTest(unittest.TestCase):
+    def test_stage_manager_initializes_push_all_selection_flag(self):
+        with patch("stage_manager.TrophyObserver", return_value=DummyTrophyObserver(0)):
+            manager = StageManager(
+                [
+                    {
+                        "brawler": "first",
+                        "push_until": 500,
+                        "trophies": 0,
+                        "wins": 0,
+                        "type": "trophies",
+                        "automatically_pick": False,
+                    }
+                ],
+                DummyLobbyAutomation(),
+                DummyWindowController(),
+            )
+
+        self.assertFalse(manager.push_all_needs_selection)
+
     def make_manager(self, target):
         manager = object.__new__(StageManager)
         manager.brawlers_pick_data = [

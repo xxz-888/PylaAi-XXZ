@@ -71,6 +71,7 @@ class StageManager:
         self.stop_after_post_match_rewards = False
         self.completion_notification_sent = False
         self.target_switch_prepared = False
+        self.push_all_needs_selection = False
         time_thresholds = load_toml_as_dict("./cfg/time_tresholds.toml")
         self.end_screen_dismiss_delay = float(time_thresholds.get("end_screen_dismiss_delay", 0.35))
         self.window_controller = window_controller
@@ -699,7 +700,7 @@ class StageManager:
             else:
                 print("Next brawler is in manual mode, waiting 10 seconds to let user switch.")
 
-        elif self.push_all_needs_selection:
+        elif getattr(self, "push_all_needs_selection", False):
             print("Push All queue changed from API; selecting the new lowest trophy brawler.")
             selected = self.Lobby_automation.select_lowest_trophy_brawler()
             if not selected:
