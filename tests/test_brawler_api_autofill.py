@@ -249,6 +249,40 @@ class BrawlerApiAutofillTest(unittest.TestCase):
                 os.remove(local_path)
 
     @patch("utils.refresh_brawl_stars_api_token_if_enabled")
+    def test_blank_local_api_config_does_not_erase_filled_base_config(self, mock_refresh):
+        mock_refresh.side_effect = lambda config, file_path: config
+        base_path = utils.BRAWL_STARS_API_CONFIG_PATH
+        local_path = utils.LOCAL_BRAWL_STARS_API_CONFIG_PATH
+        original_base = Path(base_path).read_text(encoding="utf-8") if Path(base_path).exists() else None
+        try:
+            Path(base_path).write_text(
+                'player_tag = "#BASE"\n'
+                'auto_refresh_token = true\n'
+                'developer_email = "base@example.com"\n'
+                'developer_password = "base-secret"\n',
+                encoding="utf-8",
+            )
+            Path(local_path).write_text(
+                'player_tag = ""\n'
+                'developer_email = ""\n'
+                'developer_password = ""\n',
+                encoding="utf-8",
+            )
+
+            config = utils.load_brawl_stars_api_config()
+
+            self.assertEqual(config["player_tag"], "#BASE")
+            self.assertEqual(config["developer_email"], "base@example.com")
+            self.assertEqual(config["developer_password"], "base-secret")
+        finally:
+            utils.clear_toml_cache(base_path)
+            utils.clear_toml_cache(local_path)
+            if original_base is not None:
+                Path(base_path).write_text(original_base, encoding="utf-8")
+            if os.path.exists(local_path):
+                os.remove(local_path)
+
+    @patch("utils.refresh_brawl_stars_api_token_if_enabled")
     def test_fallback_parser_accepts_unquoted_credentials_after_toml_error(self, mock_refresh):
         mock_refresh.side_effect = lambda config, file_path: config
         path = "cfg/test_brawl_stars_api_unquoted.toml"

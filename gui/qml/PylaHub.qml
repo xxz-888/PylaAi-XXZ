@@ -23,6 +23,7 @@ ApplicationWindow {
     property string performanceProfile: "balanced"
     property string newInstanceEmulator: "ldplayer"
     property string newInstanceName: ""
+    property string newInstancePlayerTag: ""
 
     function reloadState() {
         if (hubBridge) {
@@ -1062,6 +1063,14 @@ ApplicationWindow {
                             }
                         }
                         FieldRow {
+                            label: "Player Tag"
+                            ConfigInput {
+                                anchors.fill: parent
+                                value: root.newInstancePlayerTag
+                                onSaved: function(value) { root.newInstancePlayerTag = value }
+                            }
+                        }
+                        FieldRow {
                             label: "Detected"
                             Flow {
                                 width: parent.width
@@ -1074,6 +1083,9 @@ ApplicationWindow {
                                         onClicked: {
                                             root.newInstanceEmulator = modelData.emulator
                                             root.newInstanceName = modelData.name
+                                            if (!root.newInstancePlayerTag) {
+                                                root.newInstancePlayerTag = String(root.value("api", "player_tag"))
+                                            }
                                         }
                                     }
                                 }
@@ -1093,7 +1105,12 @@ ApplicationWindow {
                                 spacing: 8
                                 HubButton {
                                     label: "Add Instance"
-                                    onClicked: root.runAction("instance-add-named:" + root.newInstanceEmulator + ":" + encodeURIComponent(root.newInstanceName))
+                                    onClicked: {
+                                        root.runAction("instance-add-named:" + root.newInstanceEmulator + ":" + encodeURIComponent(root.newInstanceName))
+                                        if (root.newInstancePlayerTag) {
+                                            root.runAction("instance-player-tag:" + encodeURIComponent(root.newInstanceName) + ":" + encodeURIComponent(root.newInstancePlayerTag))
+                                        }
+                                    }
                                 }
                                 HubButton {
                                     label: "Use Current"
@@ -1105,6 +1122,7 @@ ApplicationWindow {
                     }
                     ActionRow {
                         HubButton { label: "Fetch Instances"; secondary: true; onClicked: root.reloadState() }
+                        HubButton { label: "Align Windows"; secondary: true; onClicked: root.runAction("instance-align-windows") }
                     }
                     SectionTitle {
                         title: "CONFIGURED INSTANCES"
@@ -1117,7 +1135,7 @@ ApplicationWindow {
                             model: (root.hubState.instances && root.hubState.instances.items) ? root.hubState.instances.items : []
                             delegate: Rectangle {
                                 Layout.fillWidth: true
-                                height: 82
+                                height: 122
                                 radius: 10
                                 color: modelData.running ? "#182318" : theme.panel
                                 border.width: 1
@@ -1131,7 +1149,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         spacing: 3
                                         Text {
-                                            text: modelData.name + "  (" + modelData.id + ")"
+                                            text: "Instance " + (index + 1) + ": " + modelData.name + "  (" + modelData.id + ")"
                                             color: theme.text
                                             font.pixelSize: 14
                                             font.weight: Font.DemiBold
@@ -1139,11 +1157,16 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                         }
                                         Text {
-                                            text: modelData.emulator + "  |  ADB " + modelData.emulator_port + "  |  " + (modelData.running ? "running" : "stopped")
+                                            text: modelData.emulator + "  |  ADB " + modelData.emulator_port + "  |  Tag " + (modelData.player_tag || "not set") + "  |  " + (modelData.running ? "running" : "stopped")
                                             color: modelData.running ? theme.ok : theme.faint
                                             font.pixelSize: 11
                                             Layout.fillWidth: true
                                             elide: Text.ElideRight
+                                        }
+                                        ConfigInput {
+                                            Layout.fillWidth: true
+                                            value: modelData.player_tag || ""
+                                            onSaved: function(value) { root.runAction("instance-player-tag:" + modelData.id + ":" + encodeURIComponent(value)) }
                                         }
                                         Text {
                                             text: modelData.brawler ? ("Brawler: " + modelData.brawler + "  Target: " + modelData.target) : "Queue: " + modelData.queue_path

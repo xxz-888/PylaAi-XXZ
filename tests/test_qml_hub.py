@@ -234,6 +234,8 @@ class QmlHubStateTests(unittest.TestCase):
                 self.assertIn('if action.startswith("instance-start:"):', bridge)
             elif action.startswith("instance-stop:"):
                 self.assertIn('if action.startswith("instance-stop:"):', bridge)
+            elif action.startswith("instance-player-tag:"):
+                self.assertIn('if action.startswith("instance-player-tag:"):', bridge)
             else:
                 self.assertIn(action, direct_handlers)
 
@@ -244,6 +246,8 @@ class QmlHubStateTests(unittest.TestCase):
         self.assertIn("def startPyla(self):", bridge)
         self.assertIn("onClicked: hubBridge.openDiscord()", qml)
         self.assertIn("onClicked: hubBridge.openPatreon()", qml)
+        self.assertIn('label: "Align Windows"', qml)
+        self.assertIn('if action == "instance-align-windows":', bridge)
 
     def test_instances_page_fetches_and_selects_detected_instances(self):
         qml = Path("gui/qml/PylaHub.qml").read_text(encoding="utf-8")
@@ -270,6 +274,14 @@ class QmlHubStateTests(unittest.TestCase):
 
         self.assertIn("ensure_pyside6_available", bridge)
         self.assertIn('"PySide6>=6.7.0"', bridge)
+
+    def test_qml_hub_configures_qt_dpi_before_app_creation(self):
+        source = Path("gui/qml_hub.py").read_text(encoding="utf-8")
+
+        self.assertIn("def configure_qt_startup", source)
+        self.assertIn("windows:dpiawareness=0", source)
+        self.assertIn("qt.qpa.window.warning=false", source)
+        self.assertLess(source.index("configure_qt_startup()"), source.index("QGuiApplication.instance()"))
 
 
 if __name__ == "__main__":

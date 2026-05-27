@@ -8,4 +8,5 @@ enabled = true
 emulator = "mumu"
 emulator_port = 16384
 emulator_profile_index = "auto"
+player_tag = ""
 queue_path = "instances/default/latest_brawler_data.json"

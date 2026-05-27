@@ -1,11 +1,25 @@
 import sys
 import json
+import os
 import subprocess
 import threading
 from urllib.parse import unquote
 from pathlib import Path
 
 from gui.hub_state import HubStateStore
+
+
+def configure_qt_startup():
+    platform = os.environ.get("QT_QPA_PLATFORM", "").strip()
+    if not platform:
+        os.environ["QT_QPA_PLATFORM"] = "windows:dpiawareness=0"
+    elif platform.lower() == "windows":
+        os.environ["QT_QPA_PLATFORM"] = "windows:dpiawareness=0"
+
+    rules = os.environ.get("QT_LOGGING_RULES", "").strip()
+    dpi_rule = "qt.qpa.window.warning=false"
+    if dpi_rule not in rules:
+        os.environ["QT_LOGGING_RULES"] = f"{rules};{dpi_rule}" if rules else dpi_rule
 
 
 def ensure_pyside6_available():
@@ -39,6 +53,7 @@ class QmlHub:
             correct_zoom=True,
             on_close_callback=None,
     ):
+        configure_qt_startup()
         ensure_pyside6_available()
         from PySide6.QtCore import QObject, QUrl, Signal, Slot
         from PySide6.QtGui import QGuiApplication, QIcon
@@ -242,16 +257,30 @@ class QmlHub:
                         "emulator_port": instance["emulator_port"],
                         "emulator_profile_index": instance["emulator_profile_index"],
                         "emulator_instance_name": instance["name"],
+                        "player_tag": self._store.brawl_stars_api_config.get("player_tag", ""),
                     })
                     return (
                         f"Added {profile['name']} on port {profile['emulator_port']}. "
                         "Start it from the instance list."
                     )
+                if action.startswith("instance-player-tag:"):
+                    from gui.instance_config import set_instance_player_tag
+
+                    _prefix, instance_id, raw_tag = action.split(":", 2)
+                    profile = set_instance_player_tag(instance_id, unquote(raw_tag))
+                    return f"Saved player tag for {profile['name']}."
                 if action.startswith("instance-start:"):
                     from gui.instance_supervisor import InstanceSupervisor
 
                     instance_id = action.split(":", 1)[1]
                     ok, message = InstanceSupervisor().start_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action == "instance-align-windows":
+                    from gui.instance_supervisor import InstanceSupervisor
+
+                    ok, message = InstanceSupervisor().align_windows()
                     if not ok:
                         raise ValueError(message)
                     return message

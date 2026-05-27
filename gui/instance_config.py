@@ -355,6 +355,7 @@ def normalize_instance_profile(instance_id: str, profile: dict[str, Any] | None 
         "emulator_port": port,
         "emulator_profile_index": profile_index,
         "emulator_instance_name": str(profile.get("emulator_instance_name") or profile.get("name") or "").strip(),
+        "player_tag": str(profile.get("player_tag") or "").strip(),
         "queue_path": queue_path.replace("\\", "/"),
     }
 
@@ -397,12 +398,21 @@ def upsert_instance_profile(instance_id: str, profile: dict[str, Any]) -> dict[s
         "emulator_port": normalized["emulator_port"],
         "emulator_profile_index": normalized["emulator_profile_index"],
         "emulator_instance_name": normalized["emulator_instance_name"],
+        "player_tag": normalized["player_tag"],
         "queue_path": normalized["queue_path"],
     }
     data["instances"] = instances
     save_instances_config(data)
     ensure_instance_dirs(instance_id)
     return normalized
+
+
+def set_instance_player_tag(instance_id: str, player_tag: str) -> dict[str, Any]:
+    profile = get_instance_profile(instance_id)
+    if not profile:
+        raise ValueError(f"Unknown instance '{instance_id}'.")
+    profile["player_tag"] = str(player_tag or "").strip()
+    return upsert_instance_profile(instance_id, profile)
 
 
 def delete_instance_profile(instance_id: str) -> bool:
@@ -500,6 +510,12 @@ def apply_instance_overrides(instance_id: str | None = None) -> dict[str, Any] |
     general["emulator_profile_index"] = str(profile["emulator_profile_index"])
     general["emulator_instance_name"] = str(profile.get("emulator_instance_name", ""))
     cached_toml[general_path] = general
+    player_tag = str(profile.get("player_tag", "")).strip()
+    if player_tag:
+        api_path = resolve_project_path("cfg/brawl_stars_api.toml")
+        api_config = dict(load_toml_as_dict("cfg/brawl_stars_api.toml"))
+        api_config["player_tag"] = player_tag
+        cached_toml[api_path] = api_config
     return profile
 
 
@@ -517,6 +533,7 @@ def migrate_single_instance_to_default() -> dict[str, Any]:
         "emulator": emulator,
         "emulator_port": port,
         "emulator_profile_index": general.get("emulator_profile_index", infer_profile_index(emulator, port)),
+        "player_tag": load_toml_as_dict("cfg/brawl_stars_api.toml").get("player_tag", ""),
     })
 
     source_queue = Path("latest_brawler_data.json")

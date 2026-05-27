@@ -135,8 +135,24 @@ def _load_brawl_stars_api_toml_config(file_path):
         local_path = resolve_project_path(LOCAL_BRAWL_STARS_API_CONFIG_PATH)
         if os.path.exists(local_path):
             clear_toml_cache(LOCAL_BRAWL_STARS_API_CONFIG_PATH)
-            config.update(load_toml_as_dict(LOCAL_BRAWL_STARS_API_CONFIG_PATH))
+            config = _merge_brawl_stars_api_local_config(
+                config,
+                load_toml_as_dict(LOCAL_BRAWL_STARS_API_CONFIG_PATH),
+            )
     return config
+
+
+def _merge_brawl_stars_api_local_config(base_config, local_config):
+    merged = dict(base_config or {})
+    for key, value in dict(local_config or {}).items():
+        if isinstance(value, str) and not value.strip():
+            if str(merged.get(key, "")).strip():
+                continue
+        if key == "player_tag" and str(value or "").strip().upper() == "#YOURTAG":
+            if str(merged.get(key, "")).strip().upper() not in ("", "#YOURTAG"):
+                continue
+        merged[key] = value
+    return merged
 
 
 def get_public_ip(service_url="https://api.ipify.org"):
@@ -418,6 +434,15 @@ def resolve_brawler_name_alias(name):
     return load_brawler_name_aliases().get(normalized, normalized)
 
 def get_config_player_tag(config):
+    try:
+        from gui.instance_config import get_active_instance_id, get_instance_profile
+
+        profile = get_instance_profile(get_active_instance_id())
+        instance_tag = str((profile or {}).get("player_tag", "")).strip()
+        if instance_tag and instance_tag.upper() != "#YOURTAG":
+            return instance_tag
+    except Exception:
+        pass
     tag = str(config.get("player_tag", "")).strip()
     if tag and tag.upper() != "#YOURTAG":
         return tag

@@ -12,6 +12,7 @@ from gui.instance_config import (
     is_multi_instance_enabled,
 )
 from gui.instance_registry import list_instances, read_manifest, resolve_instance
+from gui.window_arranger import arrange_emulator_windows
 from runtime_control import STOP_REQUESTED, process_is_alive, write_state
 
 
@@ -60,7 +61,18 @@ class InstanceSupervisor:
             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if sys.platform == "win32" else 0,
         )
         self._processes[instance_id] = process
+        self.align_windows(wait_seconds=2.0)
         return True, f"Started instance '{instance_id}' (PID {process.pid})."
+
+    def align_windows(self, wait_seconds: float = 0.0) -> tuple[bool, str]:
+        try:
+            configured = len(list_instances())
+            count = arrange_emulator_windows(max_windows=configured or None, wait_seconds=wait_seconds)
+        except Exception as exc:
+            return False, f"Could not align emulator windows: {exc}"
+        if count <= 0:
+            return False, "No emulator windows found to align."
+        return True, f"Aligned {count} emulator window{'s' if count != 1 else ''}."
 
     def stop_instance(self, instance_id: str, *, timeout: float = 20.0) -> tuple[bool, str]:
         live = resolve_instance(instance_id)
