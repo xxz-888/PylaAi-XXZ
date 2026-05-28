@@ -115,6 +115,14 @@ class StageManager:
             getattr(self, "last_match_crossed_1000", False)
         )
 
+    def can_handle_daily_wins_drop(self, seconds=45.0):
+        if str(getattr(self, "last_recorded_result", "")).lower() not in {"1st", "2nd", "victory"}:
+            return False
+        changed_at = float(getattr(self, "last_recorded_result_time", 0.0) or 0.0)
+        if changed_at <= 0 or time.time() - changed_at > seconds:
+            return False
+        return int(getattr(self, "last_match_trophy_delta", 0) or 0) > 0
+
     def had_recent_trophy_change(self, seconds=30.0):
         changed_at = max(
             float(getattr(self, "last_recorded_result_time", 0.0) or 0.0),
@@ -799,6 +807,9 @@ class StageManager:
             "standard": "Standard",
         }.get(drop_type, str(drop_type).replace("_", " ").title())
         print(f"{label} star drop detected; opening by template.")
+        if drop_type == "daily_hold" and not self.can_handle_daily_wins_drop(seconds=60.0):
+            print("Daily Wins hold ignored; last recorded result was not a recent 1st/2nd win.")
+            return
         self.window_controller.keys_up(list("wasd"))
         current_height, current_width = screenshot.shape[:2]
         width_ratio = current_width / 1920
@@ -819,7 +830,13 @@ class StageManager:
                     break
                 if duration == 5.0:
                     print("Starr Nova hold still detected after 5s; trying 10s hold.")
-        elif drop_type in ("angelic", "demonic", "daily_hold"):
+        elif drop_type == "daily_hold":
+            if hasattr(self.window_controller, "long_press"):
+                self.window_controller.long_press(x, y, duration=10.0)
+            else:
+                self.window_controller.click(x, y, delay=10.0)
+            time.sleep(0.25)
+        elif drop_type in ("angelic", "demonic"):
             for _ in range(2):
                 if hasattr(self.window_controller, "long_press"):
                     self.window_controller.long_press(x, y, duration=1.15)

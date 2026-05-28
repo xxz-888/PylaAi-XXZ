@@ -62,7 +62,7 @@ def main():
     if detector.device == "CPUExecutionProvider":
         print("WARNING: ONNX is running on CPU.")
         print("- Stable GPU fix: py -3.11-64 tools\\fix_gpu_runtime.py directml")
-        print("- CUDA is advanced only: py -3.11-64 tools\\fix_gpu_runtime.py cuda")
+        print("- This removes CPU-only onnxruntime and installs onnxruntime-directml==1.24.4.")
     if detector.device == "DmlExecutionProvider" and ips < 10:
         print("WARNING: DirectML is active but slow.")
         print("- Try directml_device_id = \"1\" on dual-GPU laptops and restart the bot.")

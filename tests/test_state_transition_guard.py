@@ -280,8 +280,20 @@ class StateTransitionGuardTests(unittest.TestCase):
                 "daily_star_drop",
                 previous_state="end_1st",
                 match_result_seen=True,
+                daily_wins_drop_allowed=True,
             ),
             "daily_star_drop",
+        )
+
+    def test_daily_star_drop_is_blocked_after_non_winning_result(self):
+        self.assertEqual(
+            normalize_detected_state(
+                "daily_star_drop",
+                previous_state="end_3rd",
+                match_result_seen=True,
+                daily_wins_drop_allowed=False,
+            ),
+            "end_3rd",
         )
 
     def test_nova_star_drop_is_allowed_after_post_match_result(self):

@@ -43,6 +43,9 @@ class SetupBootstrapTests(unittest.TestCase):
         source = Path("tools/fix_gpu_runtime.py").read_text(encoding="utf-8")
 
         self.assertIn('"PySide6>=6.7.0"', source)
+        self.assertIn('"psutil>=7.0.0"', source)
+        self.assertIn('"websockets>=15.0"', source)
+        self.assertIn('"onnxruntime-directml==1.24.4"', source)
 
     def test_setup_repairs_numpy_and_opencv_before_importing_utils(self):
         source = Path("setup.py").read_text(encoding="utf-8")
@@ -54,6 +57,9 @@ class SetupBootstrapTests(unittest.TestCase):
         self.assertIn('"numpy==1.26.4"', source)
         self.assertIn('"opencv-python-headless", "opencv-python"', source)
         self.assertIn('"opencv-python==4.8.0.76"', source)
+        self.assertIn('"psutil>=7.0.0"', source)
+        self.assertIn('"websockets>=15.0"', source)
+        self.assertIn('DIRECTML_RUNTIME = "onnxruntime-directml==1.24.4"', source)
 
     def test_direct_setup_creates_run_bat(self):
         source = Path("setup.py").read_text(encoding="utf-8")

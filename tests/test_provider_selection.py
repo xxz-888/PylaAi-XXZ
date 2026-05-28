@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from detect import Detect, _build_providers, _fallback_providers_after_runtime_failure
+from detect import Detect, _build_providers, _fallback_providers_after_runtime_failure, get_optimal_threads
 from utils import DefaultEasyOCR
 
 
@@ -99,6 +99,10 @@ class ProviderSelectionTests(unittest.TestCase):
     def test_easyocr_is_forced_to_cpu(self, mock_reader):
         DefaultEasyOCR()
         self.assertFalse(mock_reader.call_args.kwargs["gpu"])
+
+    @patch("detect.load_toml_as_dict", return_value={"used_threads": "6"})
+    def test_configured_threads_are_capped_to_safe_limit(self, *_):
+        self.assertEqual(get_optimal_threads(max_limit=4), 4)
 
 
 if __name__ == "__main__":

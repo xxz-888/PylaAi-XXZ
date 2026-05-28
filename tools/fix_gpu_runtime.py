@@ -30,9 +30,11 @@ BASE_REQUIREMENTS = [
     "pyautogui>=0.9.54",
     "packaging>=23.0",
     "PySide6>=6.7.0",
-    "numpy<2.0.0",
+    "numpy==1.26.4",
     "adbutils==2.12.0",
     "av==12.3.0",
+    "psutil>=7.0.0",
+    "websockets>=15.0",
 ]
 ONNX_VARIANTS = [
     "onnxruntime",
@@ -87,7 +89,7 @@ def detect_runtime_variant():
 
 def install_variant(variant):
     package = {
-        "directml": "onnxruntime-directml",
+        "directml": "onnxruntime-directml==1.24.4",
         "cuda": "onnxruntime-gpu",
         "cpu": "onnxruntime",
     }[variant]

@@ -31,6 +31,8 @@ from setuptools import setup, find_packages
 
 from gpu_support import apply_gpu_config, detect_graphics_cards, get_gpu_data as detect_gpu_data
 
+DIRECTML_RUNTIME = "onnxruntime-directml==1.24.4"
+
 def force_install(reqs, no_deps=False):
     cmd = [sys.executable, "-m", "pip", "install"]
     if no_deps: cmd += ["--force-reinstall", "--no-deps"]
@@ -108,7 +110,8 @@ def setup_pyla():
         "numpy==1.26.4",
         "customtkinter>=5.2.0", "toml>=0.10.2", "Pillow>=10.0.0", "discord.py>=2.3.2",
         "opencv-python==4.8.0.76", "requests", "ultralytics", "aiohttp", "easyocr",
-        "google-play-scraper", "pyautogui>=0.9.54", "packaging>=23.0", "PySide6>=6.7.0"
+        "google-play-scraper", "pyautogui>=0.9.54", "packaging>=23.0", "PySide6>=6.7.0",
+        "psutil>=7.0.0", "websockets>=15.0"
     ]
     force_install(base_reqs)
 
@@ -133,13 +136,13 @@ def setup_pyla():
         print(f"\n NVIDIA: {name} detected.")
         if auto_setup:
             print("\nAuto setup: installing DirectML GPU acceleration for stable Windows NVIDIA systems.")
-            install_onnxruntime_variant("onnxruntime-directml")
+            install_onnxruntime_variant(DIRECTML_RUNTIME)
             onnx_installed = True
             onnx_variant = "directml"
             status_pytorch = "DirectML Edition"
             status_accel = "DirectML"
         elif ask_user("Install DirectML GPU acceleration? (recommended; stable on most Windows NVIDIA systems)"):
-            install_onnxruntime_variant("onnxruntime-directml")
+            install_onnxruntime_variant(DIRECTML_RUNTIME)
             onnx_installed = True
             onnx_variant = "directml"
             status_pytorch = "DirectML Edition"
@@ -156,7 +159,7 @@ def setup_pyla():
     elif target == "intel":
         print(f"\n Intel: {name} detected.")
         if auto_setup or ask_user("Install DirectML GPU acceleration? (recommended for most Windows Intel GPUs)"):
-            install_onnxruntime_variant("onnxruntime-directml")
+            install_onnxruntime_variant(DIRECTML_RUNTIME)
             onnx_installed = True
             onnx_variant = "directml"
             status_pytorch = "DirectML Edition"
@@ -172,14 +175,14 @@ def setup_pyla():
     elif "amd" in target:
         print(f"\n AMD: {name} detected.")
         if auto_setup or ask_user("Install AMD DirectML acceleration?"):
-            install_onnxruntime_variant("onnxruntime-directml")
+            install_onnxruntime_variant(DIRECTML_RUNTIME)
             onnx_installed = True
             onnx_variant = "directml"
             status_pytorch = "DirectML Edition"
             status_accel = "DirectML"
 
     elif auto_setup or ask_user("Install DirectML GPU acceleration? (works on many Windows GPUs)"):
-        install_onnxruntime_variant("onnxruntime-directml")
+        install_onnxruntime_variant(DIRECTML_RUNTIME)
         onnx_installed = True
         onnx_variant = "directml"
         status_pytorch = "DirectML Edition"

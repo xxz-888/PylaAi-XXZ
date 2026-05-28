@@ -1031,7 +1031,13 @@ def is_in_daily_wins_hold_drop(image):
         return False
     title_white = mask_ratio(title, (0, 0, 160), (179, 90, 255))
     title_dark = mask_ratio(title, (0, 0, 0), (179, 255, 85))
-    if title_white < 0.11 or title_dark < 0.08:
+    header = image[0:int(125 * height_ratio), 0:int(360 * width_ratio)]
+    header_text_band = image[int(18 * height_ratio):int(95 * height_ratio), 0:int(300 * width_ratio)]
+    if header.size == 0 or header_text_band.size == 0:
+        return False
+    header_dark = mask_ratio(header, (0, 0, 0), (179, 255, 70))
+    header_white = mask_ratio(header_text_band, (0, 0, 185), (179, 65, 255))
+    if title_white < 0.09 or title_dark < 0.08 or header_dark < 0.34 or header_white < 0.035:
         return False
 
     sx, sy, sw, sh = scaled_region([520, 160, 720, 520])

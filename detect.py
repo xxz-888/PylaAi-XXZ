@@ -26,8 +26,14 @@ def get_optimal_threads(max_limit=4):
     configured_threads = general_config.get("used_threads", general_config.get("onnx_cpu_threads", "auto"))
     if str(configured_threads).strip().lower() != "auto":
         try:
-            threads_amount = max(1, int(configured_threads))
-            print(f"Using configured ONNX CPU threads: {threads_amount}.")
+            raw_threads_amount = max(1, int(configured_threads))
+            threads_amount = min(raw_threads_amount, max_limit)
+            if raw_threads_amount != threads_amount:
+                print(
+                    f"Capping configured ONNX CPU threads from {raw_threads_amount} to {threads_amount}."
+                )
+            else:
+                print(f"Using configured ONNX CPU threads: {threads_amount}.")
             return threads_amount
         except (TypeError, ValueError):
             print(f"Ignoring invalid used_threads={configured_threads!r}; falling back to auto.")

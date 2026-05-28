@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from tools import fix_gpu_runtime
@@ -12,12 +13,17 @@ class FixGpuRuntimeTests(unittest.TestCase):
     def test_auto_candidate_order_tries_cuda_only_for_nvidia(self):
         self.assertEqual(
             fix_gpu_runtime.auto_candidate_variants([("nvidia", "RTX 4070")]),
-            ["directml", "cuda", "cpu"],
+            ["directml", "cpu"],
         )
         self.assertEqual(
             fix_gpu_runtime.auto_candidate_variants([("amd", "Radeon RX")]),
             ["directml", "cpu"],
         )
+
+    def test_directml_runtime_is_pinned_to_known_fast_build(self):
+        source = Path("tools/fix_gpu_runtime.py").read_text(encoding="utf-8")
+        self.assertIn('"directml": "onnxruntime-directml==1.24.4"', source)
+        self.assertIn('"numpy==1.26.4"', source)
 
     @patch("subprocess.check_output", side_effect=FileNotFoundError)
     def test_auto_selects_directml_without_nvidia(self, _):

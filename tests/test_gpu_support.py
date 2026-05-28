@@ -34,7 +34,7 @@ class GpuSupportTests(unittest.TestCase):
     def test_auto_candidates_include_cuda_for_nvidia(self):
         self.assertEqual(
             auto_candidate_variants([("nvidia", "NVIDIA GeForce RTX 4070")]),
-            ["directml", "cuda", "cpu"],
+            ["directml", "cpu"],
         )
 
     @patch("gpu_support._wmic_video_controllers", return_value=[
@@ -56,6 +56,8 @@ class GpuSupportTests(unittest.TestCase):
         config = {}
         apply_gpu_config(config, "directml", [("amd", "AMD Radeon RX 7600")])
         self.assertEqual(config["cpu_or_gpu"], "directml")
+        self.assertEqual(config["onnx_cpu_threads"], 4)
+        self.assertEqual(config["used_threads"], 4)
 
     def test_gpu_help_message_for_amd_missing_provider(self):
         message = gpu_help_message("missing_gpu_provider", "amd")
@@ -64,7 +66,7 @@ class GpuSupportTests(unittest.TestCase):
 
     def test_gpu_help_message_for_nvidia_missing_provider(self):
         message = gpu_help_message("missing_gpu_provider", "nvidia")
-        self.assertIn("cuda", message.lower())
+        self.assertIn("directml", message.lower())
 
 
 if __name__ == "__main__":

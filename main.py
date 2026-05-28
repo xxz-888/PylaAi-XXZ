@@ -187,6 +187,7 @@ def normalize_detected_state(
         trophy_result_recorded=False,
         recent_trophy_change=False,
         prestige_reward_allowed=True,
+        daily_wins_drop_allowed=True,
         exact_star_drop_after_match=False,
 ):
     if detected_state == "match_making":
@@ -194,6 +195,8 @@ def normalize_detected_state(
             return detected_state
         return previous_state or "match"
     if detected_state in STAR_DROP_STATES:
+        if detected_state == "daily_star_drop" and not daily_wins_drop_allowed:
+            return previous_state or "match"
         allowed_context = (
                 previous_state in MATCH_RESULT_STATES
                 or previous_state in OUT_OF_MATCH_REWARD_STATES
@@ -947,6 +950,7 @@ def pyla_main(data):
                 trophy_result_recorded=trophy_result_recorded,
                 recent_trophy_change=recent_trophy_change,
                 prestige_reward_allowed=self.Stage_manager.can_handle_prestige_reward_screen(),
+                daily_wins_drop_allowed=self.Stage_manager.can_handle_daily_wins_drop(),
                 exact_star_drop_after_match=detected_state in STAR_DROP_STATES,
             )
             if detected_state != "lobby":

@@ -179,13 +179,7 @@ def recommended_directml_device_id(cards=None):
 
 
 def auto_candidate_variants(cards=None):
-    cards = cards if cards is not None else detect_graphics_cards()
-    vendors = {vendor for vendor, _name in cards}
-    candidates = ["directml"]
-    if "nvidia" in vendors:
-        candidates.append("cuda")
-    candidates.append("cpu")
-    return candidates
+    return ["directml", "cpu"]
 
 
 def detect_runtime_variant():
@@ -218,7 +212,7 @@ def gpu_help_message(context, vendor=None, provider=None):
             )
         return (
             "WARNING: GPU inference was requested but no usable GPU ONNX provider is installed. "
-            "NVIDIA users run: py -3.11-64 tools\\fix_gpu_runtime.py cuda"
+            "NVIDIA users run: py -3.11-64 tools\\fix_gpu_runtime.py directml"
         )
 
     if context == "session_cpu_fallback":
@@ -231,7 +225,7 @@ def gpu_help_message(context, vendor=None, provider=None):
                 "Intel users repair DirectML with: py -3.11-64 tools\\fix_gpu_runtime.py directml"
             )
         return (
-            "NVIDIA users can repair CUDA with: py -3.11-64 tools\\fix_gpu_runtime.py cuda"
+            "NVIDIA users repair DirectML with: py -3.11-64 tools\\fix_gpu_runtime.py directml"
         )
 
     if context == "runtime_provider_failure":
@@ -304,6 +298,8 @@ def apply_gpu_config(config, variant, cards=None):
     cards = cards if cards is not None else detect_graphics_cards()
     variant = normalize_runtime_variant(variant)
     config["cpu_or_gpu"] = variant
+    config["onnx_cpu_threads"] = 4
+    config["used_threads"] = 4
     if variant == "directml":
         device_id = recommended_directml_device_id(cards)
         if device_id != "auto":
