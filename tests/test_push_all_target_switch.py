@@ -472,6 +472,27 @@ class PushAllTargetSwitchTest(unittest.TestCase):
         self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "second")
         self.assertEqual(manager.Trophy_observer.current_trophies, 0)
 
+    @patch("stage_manager.save_brawler_data")
+    @patch("stage_manager.time.sleep", return_value=None)
+    @patch("stage_manager.get_state", side_effect=["end_1st", "lobby"])
+    def test_end_game_prepares_push_all_1000_switch_before_lobby(
+            self,
+            _mock_get_state,
+            _mock_sleep,
+            _mock_save,
+    ):
+        manager = self.make_manager(1000)
+        manager.brawlers_pick_data[0]["trophies"] = 995
+        manager.Trophy_observer = DummyTrophyObserver(995)
+        manager.dismiss_end_screen = lambda use_play_again=False: None
+
+        manager.end_game()
+
+        self.assertTrue(manager.target_switch_prepared)
+        self.assertTrue(manager.push_all_needs_selection)
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "second")
+        self.assertEqual(manager.Trophy_observer.current_trophies, 0)
+
     @patch.object(StageManager, "refresh_push_all_trophies_from_api", return_value=False)
     @patch("stage_manager.save_brawler_data")
     @patch("stage_manager.time.sleep", return_value=None)

@@ -110,9 +110,19 @@ class StageManager:
         current = self.brawlers_pick_data[0] if getattr(self, "brawlers_pick_data", None) else {}
         if str(current.get("type", "trophies")).strip().lower() != "trophies":
             return False
+        target = self._number_or_default(current.get("push_until", 1000), 1000)
+        if target > 1000:
+            return False
 
-        return self.had_recent_trophy_change(seconds=45.0) or bool(
-            getattr(self, "last_match_crossed_1000", False)
+        if bool(getattr(self, "last_match_crossed_1000", False)):
+            return True
+
+        changed_at = float(getattr(self, "last_recorded_result_time", 0.0) or 0.0)
+        if changed_at <= 0 or time.time() - changed_at > 45.0:
+            return False
+        return (
+            self._number_or_default(getattr(self.Trophy_observer, "current_trophies", 0), 0) >= 1000
+            and self._number_or_default(current.get("trophies", 0), 0) >= 1000
         )
 
     def can_handle_daily_wins_drop(self, seconds=45.0):
@@ -898,8 +908,17 @@ class StageManager:
             print("Could not reach lobby after reward; will retry from normal state loop.")
             return
 
+        current_target = self._number_or_default(
+            self.brawlers_pick_data[0].get("push_until", 1000) if self.brawlers_pick_data else 1000,
+            1000,
+        )
+        current_completed = (
+            self._number_or_default(getattr(self.Trophy_observer, "current_trophies", 0), 0) >= current_target
+            or bool(getattr(self, "last_match_crossed_1000", False))
+        )
+
         lobby_trophies = self.read_lobby_trophies_from_screenshot(lobby_screenshot)
-        if lobby_trophies is not None and self.brawlers_pick_data:
+        if lobby_trophies is not None and self.brawlers_pick_data and not current_completed:
             print(f"Lobby trophies after reward: {lobby_trophies}")
             self.Trophy_observer.change_trophies(lobby_trophies)
             self.brawlers_pick_data[0]["trophies"] = lobby_trophies
@@ -907,9 +926,8 @@ class StageManager:
 
         if lobby_trophies is None:
             print("Could not read lobby trophies after prestige; trusting confirmed prestige reward screen.")
-        elif lobby_trophies > 20:
-            print("Reward screen did not confirm a 1k trophy reset; not forcing brawler switch.")
-            return
+        elif current_completed:
+            print("Prestige reward confirmed after 1k target; ignoring lobby OCR for switch decision.")
 
         if not self.advance_to_next_brawler_after_prestige():
             self.window_controller.press_key("Q")

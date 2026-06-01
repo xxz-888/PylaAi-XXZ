@@ -168,7 +168,7 @@ class PrestigeRewardTests(unittest.TestCase):
         self.assertTrue(manager.Lobby_automation.lowest_selected)
         self.assertIn((1280, 892), manager.window_controller.clicks)
 
-    def test_prestige_reward_does_not_force_switch_when_lobby_trophies_are_not_reset(self):
+    def test_prestige_reward_switches_even_when_lobby_ocr_misreads_after_1k(self):
         manager = object.__new__(StageManager)
         manager.brawlers_pick_data = [
             {"brawler": "gray", "trophies": 999, "push_until": 1000, "wins": 0, "win_streak": 0},
@@ -188,9 +188,9 @@ class PrestigeRewardTests(unittest.TestCase):
                 patch("stage_manager.save_brawler_data"):
             manager.handle_prestige_reward()
 
-        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "gray")
-        self.assertEqual(manager.Trophy_observer.current_trophies, 250)
-        self.assertFalse(manager.Lobby_automation.lowest_selected)
+        self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "shelly")
+        self.assertEqual(manager.Trophy_observer.current_trophies, 20)
+        self.assertTrue(manager.Lobby_automation.lowest_selected)
         self.assertIn((1280, 892), manager.window_controller.clicks)
 
     def test_prestige_reward_trusts_confirmed_screen_when_lobby_ocr_fails(self):
@@ -235,7 +235,7 @@ class PrestigeRewardTests(unittest.TestCase):
         self.assertEqual(manager.window_controller.clicks, [])
         self.assertEqual(manager.window_controller.presses, [])
 
-    def test_prestige_reward_handler_allows_recent_trophy_result_without_1000_crossing(self):
+    def test_prestige_reward_handler_ignores_recent_result_without_1k_completion(self):
         manager = object.__new__(StageManager)
         manager.Trophy_observer = DummyTrophyObserver()
         manager.Trophy_observer.current_trophies = 678
@@ -253,13 +253,10 @@ class PrestigeRewardTests(unittest.TestCase):
         self.draw_prestige_screen(screenshot_bgr, button_box=(1140, 840, 280, 105))
         manager.window_controller.screenshot = lambda: cv2.cvtColor(screenshot_bgr, cv2.COLOR_BGR2RGB)
 
-        with patch("stage_manager.get_state", return_value="lobby"), \
-                patch.object(manager, "read_lobby_trophies_from_screenshot", return_value=678), \
-                patch("stage_manager.save_brawler_data"):
-            manager.handle_prestige_reward()
+        manager.handle_prestige_reward()
 
-        self.assertIn((1280, 892), manager.window_controller.clicks)
         self.assertEqual(manager.brawlers_pick_data[0]["brawler"], "gray")
+        self.assertEqual(manager.window_controller.clicks, [])
         self.assertFalse(manager.Lobby_automation.lowest_selected)
 
     def test_prestige_reward_handler_ignores_when_no_recent_trophy_result(self):
