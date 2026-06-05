@@ -563,16 +563,17 @@ def is_in_trophy_reward(image):
 
 def is_in_reward_unlock(image):
     # Generic "YOU GOT / Unlocked" reward page shown after trophy-road rewards.
-    # It is intentionally guarded by main.py so this broad color detector is
-    # only actionable inside the post-trophy reward chain.
+    # Keep this strict: lobby/event screens contain lots of blue and white UI.
     if is_in_skin_reward_unlock(image):
         return True
+
+    if is_lobby_menu_button_visible(image):
+        return False
 
     full = crop_scaled_region(image, [0, 0, 1920, 1080])
     if full.size == 0:
         return False
 
-    hsv = cv2.cvtColor(full, cv2.COLOR_BGR2HSV)
     blue_ratio = mask_ratio(full, (92, 80, 85), (118, 255, 255))
     if blue_ratio < 0.45:
         return False
@@ -580,7 +581,9 @@ def is_in_reward_unlock(image):
     top = crop_scaled_region(image, [720, 120, 520, 150])
     bottom = crop_scaled_region(image, [700, 610, 560, 150])
     card = crop_scaled_region(image, [720, 260, 520, 330])
-    if top.size == 0 or bottom.size == 0 or card.size == 0:
+    continue_area = crop_scaled_region(image, [770, 820, 380, 150])
+    side_lobby_area = crop_scaled_region(image, [1480, 120, 420, 360])
+    if top.size == 0 or bottom.size == 0 or card.size == 0 or continue_area.size == 0:
         return False
 
     top_white = mask_ratio(top, (0, 0, 170), (179, 80, 255))
@@ -589,13 +592,19 @@ def is_in_reward_unlock(image):
     bottom_black = mask_ratio(bottom, (0, 0, 0), (179, 255, 70))
     card_dark = mask_ratio(card, (0, 0, 0), (179, 255, 80))
     card_light = mask_ratio(card, (85, 25, 115), (110, 150, 255))
+    continue_blue = mask_ratio(continue_area, (96, 80, 100), (125, 255, 255))
+    continue_white = mask_ratio(continue_area, (0, 0, 170), (179, 90, 255))
+    side_green = mask_ratio(side_lobby_area, (42, 75, 85), (82, 255, 255))
     return (
-            top_white > 0.08
+            top_white > 0.10
             and top_black > 0.04
             and bottom_yellow > 0.04
             and bottom_black > 0.03
             and card_dark > 0.10
             and card_light > 0.08
+            and continue_blue > 0.10
+            and continue_white > 0.015
+            and side_green < 0.08
     )
 
 

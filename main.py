@@ -212,7 +212,6 @@ def normalize_detected_state(
     if detected_state in TROPHY_REWARD_FOLLOWUP_STATES:
         if (
                 previous_state in {"trophy_reward", "reward_unlock"}
-                or (previous_state != "lobby" and match_result_seen)
         ):
             return detected_state
         return previous_state or "match"

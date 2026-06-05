@@ -111,6 +111,26 @@ class StateTransitionGuardTests(unittest.TestCase):
             ),
             "reward_unlock",
         )
+
+    def test_reward_unlock_is_blocked_without_trophy_reward_chain(self):
+        self.assertEqual(
+            normalize_detected_state(
+                "reward_unlock",
+                previous_state="lobby",
+                match_result_seen=True,
+                trophy_result_recorded=True,
+            ),
+            "lobby",
+        )
+        self.assertEqual(
+            normalize_detected_state(
+                "reward_unlock",
+                previous_state="match",
+                match_result_seen=True,
+                trophy_result_recorded=True,
+            ),
+            "match",
+        )
         self.assertEqual(
             normalize_detected_state(
                 "reward_unlock",

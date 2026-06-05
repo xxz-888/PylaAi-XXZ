@@ -41,7 +41,7 @@ class RewardUnlockTests(unittest.TestCase):
             cv2.COLOR_HSV2BGR,
         )[0, 0]
         light_blue = cv2.cvtColor(
-            np.full((1, 1, 3), (98, 70, 230), dtype=np.uint8),
+            np.full((1, 1, 3), (104, 130, 230), dtype=np.uint8),
             cv2.COLOR_HSV2BGR,
         )[0, 0]
         yellow = cv2.cvtColor(
@@ -56,6 +56,9 @@ class RewardUnlockTests(unittest.TestCase):
         image[520:620, 820:1100] = (0, 0, 0)
         image[650:730, 770:1160] = (0, 0, 0)
         image[630:710, 790:1140] = yellow
+        image[820:970, 770:1150] = (5, 5, 5)
+        image[840:940, 800:1120] = light_blue
+        image[875:925, 900:1040] = (245, 245, 245)
         return image
 
     @staticmethod
@@ -110,6 +113,17 @@ class RewardUnlockTests(unittest.TestCase):
 
         self.assertFalse(is_in_reward_unlock(image))
         self.assertNotEqual(get_in_game_state(image), "reward_unlock")
+
+    def test_reward_unlock_detector_rejects_lobby_like_blue_screen(self):
+        image = self.draw_reward_unlock_screen()
+        image[0:100, 1760:1920] = (245, 245, 245)
+        image[20:100, 1780:1900] = (10, 10, 10)
+        image[120:480, 1480:1900] = cv2.cvtColor(
+            np.full((1, 1, 3), (58, 210, 210), dtype=np.uint8),
+            cv2.COLOR_HSV2BGR,
+        )[0, 0]
+
+        self.assertFalse(is_in_reward_unlock(image))
 
     def test_skin_reward_detector_accepts_continue_screen(self):
         image = self.draw_skin_reward_screen()

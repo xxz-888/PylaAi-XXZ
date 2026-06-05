@@ -64,9 +64,10 @@ def verify_windows_signature(path, label):
                 "Bypass",
                 "-Command",
                 (
-                    "$sig = Get-AuthenticodeSignature -LiteralPath $args[0]; "
+                    "& { param([string]$TargetPath) "
+                    "$sig = Get-AuthenticodeSignature -LiteralPath $TargetPath; "
                     "if ($sig.Status -eq 'Valid') { exit 0 } "
-                    "Write-Host ('Signature status: ' + $sig.Status); exit 1"
+                    "Write-Host ('Signature status: ' + $sig.Status); exit 1 }"
                 ),
                 str(path),
             ],
@@ -101,8 +102,9 @@ def download_with_powershell(url, destination):
             "Bypass",
             "-Command",
             (
+                "& { param([string]$Url, [string]$Destination) "
                 "$ProgressPreference='SilentlyContinue'; "
-                "Invoke-WebRequest -Uri $args[0] -OutFile $args[1] -UseBasicParsing"
+                "Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing }"
             ),
             url,
             str(destination),

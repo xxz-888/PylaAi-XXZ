@@ -38,6 +38,10 @@ class SetupBootstrapTests(unittest.TestCase):
         self.assertIn("certificate fallback", source)
         self.assertIn("verify_windows_signature", source)
         self.assertIn("ssl._create_unverified_context", source)
+        self.assertIn("param([string]$TargetPath)", source)
+        self.assertIn("param([string]$Url, [string]$Destination)", source)
+        self.assertNotIn("$args[0]", source)
+        self.assertNotIn("$args[1]", source)
 
     def test_gpu_repair_installs_qml_dependency(self):
         source = Path("tools/fix_gpu_runtime.py").read_text(encoding="utf-8")
