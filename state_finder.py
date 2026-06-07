@@ -609,7 +609,7 @@ def is_in_reward_unlock(image):
 
 
 def get_skin_reward_continue_button_center(image):
-    button_region = [885, 850, 420, 150]
+    button_region = [835, 820, 520, 200]
     crop = crop_scaled_region(image, button_region)
     if crop.size == 0:
         return None
@@ -628,7 +628,7 @@ def get_skin_reward_continue_button_center(image):
 
 
 def get_skin_reward_equip_button_center(image):
-    button_region = [1330, 830, 520, 180]
+    button_region = [1225, 805, 670, 225]
     crop = crop_scaled_region(image, button_region)
     if crop.size == 0:
         return None
@@ -636,7 +636,7 @@ def get_skin_reward_equip_button_center(image):
     green_ratio = mask_ratio(crop, (45, 80, 100), (82, 255, 255))
     white_ratio = mask_ratio(crop, (0, 0, 170), (179, 90, 255))
     dark_ratio = mask_ratio(crop, (0, 0, 0), (179, 255, 85))
-    if green_ratio < 0.24 or white_ratio < 0.02 or dark_ratio < 0.05:
+    if green_ratio < 0.16 or white_ratio < 0.012 or dark_ratio < 0.035:
         return None
 
     current_height, current_width = image.shape[:2]

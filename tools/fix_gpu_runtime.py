@@ -14,13 +14,14 @@ from gpu_support import (
     detect_graphics_cards as gpu_detect_graphics_cards,
     detect_runtime_variant as gpu_detect_runtime_variant,
 )
+from dependency_repair import DISCORD_RUNTIME_REQUIREMENT, repair_discord_runtime
 
 
 BASE_REQUIREMENTS = [
     "customtkinter>=5.2.0",
     "toml>=0.10.2",
     "Pillow>=10.0.0",
-    "discord.py>=2.3.2",
+    DISCORD_RUNTIME_REQUIREMENT,
     "opencv-python==4.8.0.76",
     "requests",
     "ultralytics",
@@ -55,6 +56,7 @@ def install_base_requirements():
     print("Installing/repairing PylaAi core Python packages...")
     run([sys.executable, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
     run([sys.executable, "-m", "pip", "install", "--upgrade", *BASE_REQUIREMENTS])
+    repair_discord_runtime(restart=False)
     subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python-headless"], check=False)
     run([sys.executable, "-m", "pip", "install", "--upgrade", "opencv-python==4.8.0.76"])
     run([

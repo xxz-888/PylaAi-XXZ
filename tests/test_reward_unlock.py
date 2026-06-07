@@ -130,7 +130,7 @@ class RewardUnlockTests(unittest.TestCase):
 
         self.assertTrue(is_in_reward_unlock(image))
         self.assertEqual(get_in_game_state(image), "reward_unlock")
-        self.assertEqual(get_skin_reward_continue_button_center(image), (1095, 925))
+        self.assertEqual(get_skin_reward_continue_button_center(image), (1095, 920))
 
     def test_skin_reward_handler_clicks_continue_button(self):
         image_bgr = self.draw_skin_reward_screen()
@@ -141,7 +141,7 @@ class RewardUnlockTests(unittest.TestCase):
         manager.handle_reward_unlock()
 
         self.assertIn(list("wasd"), manager.window_controller.keys_released)
-        self.assertEqual(manager.window_controller.clicks, [(1095, 925)])
+        self.assertEqual(manager.window_controller.clicks, [(1095, 920)])
         self.assertEqual(manager.window_controller.presses, [])
 
     def test_skin_reward_handler_clicks_equip_now_before_continue(self):
@@ -153,9 +153,9 @@ class RewardUnlockTests(unittest.TestCase):
         manager.handle_trophy_reward()
 
         self.assertTrue(is_in_reward_unlock(image_bgr))
-        self.assertEqual(get_skin_reward_equip_button_center(image_bgr), (1590, 920))
+        self.assertEqual(get_skin_reward_equip_button_center(image_bgr), (1560, 917))
         self.assertIn(list("wasd"), manager.window_controller.keys_released)
-        self.assertEqual(manager.window_controller.clicks, [(1590, 920)])
+        self.assertEqual(manager.window_controller.clicks, [(1560, 917)])
         self.assertEqual(manager.window_controller.presses, [])
 
 

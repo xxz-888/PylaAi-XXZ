@@ -87,9 +87,11 @@ repair_python_runtime_before_cv2_import()
 
 import cv2
 
+from dependency_repair import repair_discord_runtime_before_import
 from logger_setup import setup_logging_if_enabled
 
 setup_logging_if_enabled()
+repair_discord_runtime_before_import()
 
 import window_controller
 from discord_control import DiscordControlServer
@@ -212,6 +214,8 @@ def normalize_detected_state(
     if detected_state in TROPHY_REWARD_FOLLOWUP_STATES:
         if (
                 previous_state in {"trophy_reward", "reward_unlock"}
+                or previous_state in MATCH_RESULT_STATES
+                or (previous_state == "match" and match_result_seen and recent_trophy_change)
         ):
             return detected_state
         return previous_state or "match"
