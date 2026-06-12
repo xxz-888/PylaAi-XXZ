@@ -105,6 +105,7 @@ from play import Play
 from recovery_events import log_recovery
 from runtime_control import RuntimeControlWindow
 from stage_manager import StageManager
+from state_detection_worker import StateDetectionWorker
 from state_finder import (
     get_state,
     get_starr_nova_got_it_button_center,
@@ -388,6 +389,12 @@ def pyla_main(data):
             self.perf_state_ema = None
             self.perf_play_ema = None
             self.perf_feed_fps = 0.0
+            self.state_detection_max_age = float(
+                time_thresholds.get("state_detection_max_age_seconds", 1.5)
+            )
+            self.state_detection_worker = StateDetectionWorker(get_state)
+            self.last_consumed_state_sequence = 0
+            self.state_detection_worker.start()
             self.disconnect_ocr_interval = 6.0
             self.control_window = RuntimeControlWindow()
             self.control_window.start()
@@ -1017,24 +1024,28 @@ def pyla_main(data):
                 return
 
             if self.Time_management.state_check():
-                detected_state = get_state(frame)
-                previous_state = self.state
-                state = self.apply_state_context_guard(detected_state, previous_state)
-                self.state = state
-                if state != "match":
-                    self.Play.time_since_last_proceeding = time.time()
-                if previous_state == "match" and state != "match":
-                    self.Play.reset_match_control_state()
-                elif previous_state != "match" and state == "match":
-                    self.Play.reset_match_control_state()
-                    self.match_ready_at = time.time() + self.match_warmup_seconds
-                    if previous_state in {"lobby", "match_making"}:
-                        self.Stage_manager.reset_prestige_reward_gate()
-                frame_data = None
-                self.Stage_manager.do_state(state, frame_data)
-                if state == "lobby":
-                    self.match_launch_pending = True
-                self.handle_lobby_watchdog(state)
+                self.state_detection_worker.request(
+                    frame,
+                    self.window_controller.get_latest_frame_id(),
+                )
+
+            state_result = self.state_detection_worker.consume_latest(
+                self.last_consumed_state_sequence
+            )
+            if state_result is not None:
+                sequence, result = state_result
+                self.last_consumed_state_sequence = sequence
+                self.perf_state_ema = self.update_ema(
+                    self.perf_state_ema,
+                    result["duration"],
+                )
+                if time.time() - result["finished_at"] <= self.state_detection_max_age:
+                    self.handle_detected_state(result["state"])
+                else:
+                    self.state_detection_worker.request(
+                        frame,
+                        self.window_controller.get_latest_frame_id(),
+                    )
 
             if self.Time_management.no_detections_check():
                 frame_data = self.Play.time_since_detections
@@ -1046,6 +1057,24 @@ def pyla_main(data):
                 #print("check for idle!")
                 self.lobby_automator.check_for_idle(frame)
 
+        def handle_detected_state(self, detected_state):
+            previous_state = self.state
+            state = self.apply_state_context_guard(detected_state, previous_state)
+            self.state = state
+            if state != "match":
+                self.Play.time_since_last_proceeding = time.time()
+            if previous_state == "match" and state != "match":
+                self.Play.reset_match_control_state()
+            elif previous_state != "match" and state == "match":
+                self.Play.reset_match_control_state()
+                self.match_ready_at = time.time() + self.match_warmup_seconds
+                if previous_state in {"lobby", "match_making"}:
+                    self.Stage_manager.reset_prestige_reward_gate()
+            self.Stage_manager.do_state(state, None)
+            if state == "lobby":
+                self.match_launch_pending = True
+            self.handle_lobby_watchdog(state)
+
         def try_promote_match_start(self, frame):
             if self.state not in {"match_making", "lobby"}:
                 return False
@@ -1053,7 +1082,7 @@ def pyla_main(data):
             if now - self.last_match_start_fast_check < self.match_start_fast_check_interval:
                 return False
             self.last_match_start_fast_check = now
-            detected_state = get_state(frame)
+            detected_state = self.state_detection_worker.detect_now(frame)
             state = self.apply_state_context_guard(detected_state, self.state)
             if state != "match":
                 return False
@@ -1307,12 +1336,7 @@ def pyla_main(data):
                     continue
                 self.last_processed_frame_id = frame_id
 
-                state_start = time.perf_counter()
                 self.manage_time_tasks(frame)
-                self.perf_state_ema = self.update_ema(
-                    self.perf_state_ema,
-                    time.perf_counter() - state_start,
-                )
 
                 if self.handle_visual_freeze(frame):
                     continue
@@ -1355,6 +1379,7 @@ def pyla_main(data):
                     if work_time < target_period:
                         time.sleep(target_period - work_time)
 
+            self.state_detection_worker.close()
             self.discord_control.close()
             self.telegram_control.close()
             self.control_window.close()
