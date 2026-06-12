@@ -414,6 +414,35 @@ class CombatAdaptationTests(unittest.TestCase):
         self.assertEqual(movement, 0.0)
         self.assertEqual(play.locked_teammate, (305, 100))
 
+    def test_teammate_prediction_leads_each_observed_step(self):
+        play = object.__new__(Play)
+        play.teammate_last_observed_position = (100, 100)
+        play.teammate_last_observed_at = time.time() - 0.1
+        play.teammate_velocity = (0.0, 0.0)
+        play.teammate_follow_prediction_seconds = 0.35
+        play.teammate_follow_max_lead = 90
+        play.teammate_lock_max_jump = 320
+        play.get_distance = Play.get_distance
+
+        target = play.predict_teammate_target((110, 100))
+
+        self.assertGreater(target[0], 110)
+        self.assertEqual(target[1], 100)
+        self.assertLessEqual(target[0] - 110, 90)
+
+    def test_lost_teammate_lock_expires_quickly(self):
+        play = object.__new__(Play)
+        play.locked_teammate = (300, 100)
+        play.locked_teammate_distance = 200
+        play.teammate_lock_lost_since = time.time() - 0.4
+        play.teammate_lock_lost_grace = 0.35
+        play.find_closest_teammate = lambda *_args, **_kwargs: (None, float("inf"))
+
+        teammate, distance = play.choose_locked_teammate((100, 100), [])
+
+        self.assertIsNone(teammate)
+        self.assertEqual(distance, float("inf"))
+
 
 if __name__ == "__main__":
     unittest.main()

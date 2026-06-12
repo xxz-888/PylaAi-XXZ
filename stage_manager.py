@@ -67,6 +67,7 @@ class StageManager:
         self.last_match_trophy_after = None
         self.last_match_trophy_delta = 0
         self.last_match_crossed_1000 = False
+        self.prestige_reward_eligible_until = 0.0
         self.last_player_total_trophies = None
         self.stop_after_post_match_rewards = False
         self.completion_notification_sent = False
@@ -114,6 +115,9 @@ class StageManager:
         if target > 1000:
             return False
 
+        if time.time() <= float(getattr(self, "prestige_reward_eligible_until", 0.0) or 0.0):
+            return True
+
         if bool(getattr(self, "last_match_crossed_1000", False)):
             return True
 
@@ -149,6 +153,7 @@ class StageManager:
         self.last_match_trophy_after = None
         self.last_match_trophy_delta = 0
         self.last_match_crossed_1000 = False
+        self.prestige_reward_eligible_until = 0.0
 
     def dismiss_end_screen(self, use_play_again=False):
         self.window_controller.keys_up(list("wasd"))
@@ -971,6 +976,11 @@ class StageManager:
                 self.last_match_trophy_after = trophies_after
                 self.last_match_trophy_delta = trophies_after - trophies_before
                 self.last_match_crossed_1000 = trophies_before < 1000 <= trophies_after and trophies_after > trophies_before
+                if self.last_match_crossed_1000:
+                    # The prestige screen can replace the lobby immediately.
+                    # Keep the result context alive through transient "match"
+                    # detections until the reward handler consumes it.
+                    self.prestige_reward_eligible_until = time.time() + 60.0
                 self.time_since_last_stat_change = time.time()
                 self.last_recorded_result = found_game_result
                 self.last_recorded_result_time = time.time()

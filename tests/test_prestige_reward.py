@@ -296,5 +296,34 @@ class PrestigeRewardTests(unittest.TestCase):
         manager.time_since_last_stat_change = time.time() - 31
         self.assertFalse(manager.had_recent_trophy_change(seconds=30.0))
 
+    def test_prestige_eligibility_latch_survives_immediate_reward_transition(self):
+        manager = object.__new__(StageManager)
+        manager.Trophy_observer = DummyTrophyObserver()
+        manager.Trophy_observer.current_trophies = 1000
+        manager.brawlers_pick_data = [
+            {"brawler": "gray", "type": "trophies", "push_until": 1000, "trophies": 990},
+        ]
+        manager.last_match_crossed_1000 = False
+        manager.last_recorded_result_time = 0.0
+        manager.prestige_reward_eligible_until = time.time() + 60.0
+
+        self.assertTrue(manager.can_handle_prestige_reward_screen())
+
+    def test_prestige_eligibility_latch_expires_and_resets(self):
+        manager = object.__new__(StageManager)
+        manager.Trophy_observer = DummyTrophyObserver()
+        manager.brawlers_pick_data = [
+            {"brawler": "gray", "type": "trophies", "push_until": 1000, "trophies": 990},
+        ]
+        manager.last_match_crossed_1000 = False
+        manager.last_recorded_result_time = 0.0
+        manager.prestige_reward_eligible_until = time.time() - 1.0
+
+        self.assertFalse(manager.can_handle_prestige_reward_screen())
+
+        manager.prestige_reward_eligible_until = time.time() + 60.0
+        manager.reset_prestige_reward_gate()
+        self.assertEqual(manager.prestige_reward_eligible_until, 0.0)
+
 if __name__ == "__main__":
     unittest.main()

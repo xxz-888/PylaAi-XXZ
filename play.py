@@ -492,18 +492,26 @@ class Play(Movement):
         self.locked_teammate_distance = float('inf')
         self.teammate_hysteresis = 0.75  # Switch only if another teammate is dramatically closer
         self.teammate_lock_max_jump = float(bot_config.get("teammate_lock_max_jump", 320))
+        self.teammate_lock_lost_grace = float(bot_config.get("teammate_lock_lost_grace", 0.35))
         self.teammate_lock_lost_since = 0.0
+        self.teammate_last_observed_position = None
+        self.teammate_last_observed_at = 0.0
+        self.teammate_velocity = (0.0, 0.0)
+        self.teammate_follow_prediction_seconds = float(
+            bot_config.get("teammate_follow_prediction_seconds", 0.35)
+        )
+        self.teammate_follow_max_lead = float(bot_config.get("teammate_follow_max_lead", 90))
         self.trio_grouping_enabled = str(bot_config.get("trio_grouping_enabled", "yes")).lower() in ("yes", "true", "1")
         self.showdown_playstyle_mode = str(bot_config.get("showdown_playstyle_mode", "follow")).strip().lower()
         self.teammate_follow_min_distance = float(bot_config.get("teammate_follow_min_distance", 180))
         self.teammate_follow_max_distance = float(bot_config.get("teammate_follow_max_distance", 520))
         self.teammate_follow_step_distance = float(bot_config.get("teammate_follow_step_distance", 8))
         self.teammate_combat_regroup_distance = float(bot_config.get("teammate_combat_regroup_distance", 650))
-        self.teammate_combat_bias = float(bot_config.get("teammate_combat_bias", 0.75))
+        self.teammate_combat_bias = float(bot_config.get("teammate_combat_bias", 0.88))
         self.teammate_follow_force_direct = str(bot_config.get("teammate_follow_force_direct", "no")).lower() in ("yes", "true", "1")
         self.teammate_marker_follow_enabled = str(bot_config.get("teammate_marker_follow_enabled", "yes")).lower() in ("yes", "true", "1")
         self.teammate_marker_edge_margin = float(bot_config.get("teammate_marker_edge_margin", 0.28))
-        self.teammate_marker_fallback_delay = float(bot_config.get("teammate_marker_fallback_delay", 1.25))
+        self.teammate_marker_fallback_delay = float(bot_config.get("teammate_marker_fallback_delay", 0.25))
         self.last_teammate_seen_time = 0.0
         self.wall_history = []
         self.wall_history_length = int(bot_config.get("wall_history_length", 3))
@@ -1393,7 +1401,7 @@ class Play(Movement):
         if closest_teammate is None:
             if self.teammate_lock_lost_since <= 0:
                 self.teammate_lock_lost_since = time.time()
-            if time.time() - self.teammate_lock_lost_since > 1.5:
+            if time.time() - self.teammate_lock_lost_since > getattr(self, "teammate_lock_lost_grace", 0.35):
                 self.locked_teammate = None
                 self.locked_teammate_distance = float('inf')
             return self.locked_teammate, self.locked_teammate_distance
@@ -1436,6 +1444,43 @@ class Play(Movement):
             self.locked_teammate_distance = tracked_distance
         return self.locked_teammate, self.locked_teammate_distance
 
+    def predict_teammate_target(self, teammate_pos):
+        """Lead a moving teammate slightly so follower mode reacts to each step."""
+        if teammate_pos is None:
+            return None
+
+        now = time.time()
+        previous = getattr(self, "teammate_last_observed_position", None)
+        previous_at = float(getattr(self, "teammate_last_observed_at", 0.0) or 0.0)
+        velocity_x, velocity_y = getattr(self, "teammate_velocity", (0.0, 0.0))
+
+        if previous is not None and previous_at > 0:
+            elapsed = now - previous_at
+            movement = self.get_distance(previous, teammate_pos)
+            if 0.02 <= elapsed <= 0.75 and movement <= self.teammate_lock_max_jump:
+                measured_x = (teammate_pos[0] - previous[0]) / elapsed
+                measured_y = (teammate_pos[1] - previous[1]) / elapsed
+                velocity_x = measured_x * 0.7 + velocity_x * 0.3
+                velocity_y = measured_y * 0.7 + velocity_y * 0.3
+            elif elapsed > 0.75:
+                velocity_x, velocity_y = 0.0, 0.0
+
+        self.teammate_last_observed_position = teammate_pos
+        self.teammate_last_observed_at = now
+        self.teammate_velocity = (velocity_x, velocity_y)
+
+        lead_seconds = max(0.0, getattr(self, "teammate_follow_prediction_seconds", 0.35))
+        lead_x = velocity_x * lead_seconds
+        lead_y = velocity_y * lead_seconds
+        lead_distance = math.hypot(lead_x, lead_y)
+        max_lead = max(0.0, getattr(self, "teammate_follow_max_lead", 90.0))
+        if lead_distance > max_lead > 0:
+            scale = max_lead / lead_distance
+            lead_x *= scale
+            lead_y *= scale
+
+        return teammate_pos[0] + lead_x, teammate_pos[1] + lead_y
+
     def showdown_follow_teammate(self, player_data, teammate_data, walls):
         """Official Pyla follower behavior adapted to angle movement.
 
@@ -1464,8 +1509,9 @@ class Play(Movement):
             vlog("follow teammate: no teammate detected -> roam")
             return self._wall_aware_follow_angle(player_pos, self.showdown_roam(player_data, walls), walls)
 
-        direction_x = closest_teammate[0] - player_pos[0]
-        direction_y = closest_teammate[1] - player_pos[1]
+        follow_target = self.predict_teammate_target(closest_teammate)
+        direction_x = follow_target[0] - player_pos[0]
+        direction_y = follow_target[1] - player_pos[1]
         direct_angle = self.angle_from_direction(direction_x, direction_y)
 
         if (
@@ -1641,20 +1687,21 @@ class Play(Movement):
                     desired = self.apply_combat_dodge(desired, toward_angle, now_t, enemy_distance, safe_range)
                     vlog(f"combat dodge blend -> desired={desired:.1f}°")
 
-                if (follow_teammates and teammate_data and enemy_distance > attack_range):
+                if follow_teammates and teammate_data:
                     closest_teammate, teammate_distance = self.choose_locked_teammate(
                         player_pos,
                         teammate_data,
                         walls,
                     )
                     if closest_teammate is not None and teammate_distance > self.teammate_follow_step_distance:
+                        follow_target = self.predict_teammate_target(closest_teammate)
                         team_angle = self.angle_from_direction(
-                            closest_teammate[0] - player_pos[0],
-                            closest_teammate[1] - player_pos[1],
+                            follow_target[0] - player_pos[0],
+                            follow_target[1] - player_pos[1],
                         )
                         team_weight = self.teammate_combat_bias
                         if self.trio_grouping_enabled and teammate_distance > self.teammate_combat_regroup_distance:
-                            team_weight = max(team_weight, 0.85)
+                            team_weight = max(team_weight, 0.92)
                         desired = self.blend_angles(desired, team_angle, team_weight)
                         vlog(f"combat teammate pull -> desired={desired:.1f}° (team dist={int(teammate_distance)}px, weight={team_weight:.2f})")
 
