@@ -24,13 +24,16 @@ def read_state(path):
 
 
 class RuntimeControlWindow:
-    def __init__(self):
+    def __init__(self, show_window=True):
         state_dir = Path("logs")
         self.state_path = state_dir / f"runtime_control_{os.getpid()}.state"
         self.process = None
+        self.show_window = bool(show_window)
         write_state(self.state_path, RUNNING)
 
     def start(self):
+        if not self.show_window:
+            return
         if self.process and self.process.poll() is None:
             return
         script_path = Path(__file__).resolve()
@@ -51,6 +54,10 @@ class RuntimeControlWindow:
 
     def close(self):
         write_state(self.state_path, RUNNING)
+        try:
+            self.state_path.unlink(missing_ok=True)
+        except OSError:
+            pass
         if self.process and self.process.poll() is None:
             self.process.terminate()
             try:

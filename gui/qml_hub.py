@@ -227,6 +227,19 @@ class QmlHub:
                     set_multi_instance_enabled(True)
                     migrate_single_instance_to_default()
                     return "Default instance is ready."
+                if action == "instance-open-launcher":
+                    launcher = Path(__file__).resolve().parent.parent / "multi_instance_launcher.py"
+                    executable = Path(sys.executable)
+                    if executable.name.lower() == "python.exe":
+                        pythonw = executable.with_name("pythonw.exe")
+                        if pythonw.exists():
+                            executable = pythonw
+                    subprocess.Popen(
+                        [str(executable), str(launcher)],
+                        cwd=str(launcher.parent),
+                        close_fds=True,
+                    )
+                    return "Opened the multi-instance control room."
                 if action.startswith("instance-add:"):
                     from gui.instance_config import next_free_emulator_port, set_multi_instance_enabled, upsert_instance_profile
 
@@ -270,25 +283,96 @@ class QmlHub:
                     profile = set_instance_player_tag(instance_id, unquote(raw_tag))
                     return f"Saved player tag for {profile['name']}."
                 if action.startswith("instance-start:"):
-                    from gui.instance_supervisor import InstanceSupervisor
+                    from gui.instance_supervisor import get_instance_supervisor
 
                     instance_id = action.split(":", 1)[1]
-                    ok, message = InstanceSupervisor().start_instance(instance_id)
+                    ok, message = get_instance_supervisor().start_instance(instance_id)
                     if not ok:
                         raise ValueError(message)
                     return message
                 if action == "instance-align-windows":
-                    from gui.instance_supervisor import InstanceSupervisor
+                    from gui.instance_supervisor import get_instance_supervisor
 
-                    ok, message = InstanceSupervisor().align_windows()
+                    ok, message = get_instance_supervisor().align_windows()
                     if not ok:
                         raise ValueError(message)
                     return message
                 if action.startswith("instance-stop:"):
-                    from gui.instance_supervisor import InstanceSupervisor
+                    from gui.instance_supervisor import get_instance_supervisor
 
                     instance_id = action.split(":", 1)[1]
-                    ok, message = InstanceSupervisor().stop_instance(instance_id)
+                    ok, message = get_instance_supervisor().stop_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action.startswith("instance-pause:"):
+                    from gui.instance_supervisor import get_instance_supervisor
+
+                    instance_id = action.split(":", 1)[1]
+                    ok, message = get_instance_supervisor().pause_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action.startswith("instance-resume:"):
+                    from gui.instance_supervisor import get_instance_supervisor
+
+                    instance_id = action.split(":", 1)[1]
+                    ok, message = get_instance_supervisor().resume_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action.startswith("instance-restart:"):
+                    from gui.instance_supervisor import get_instance_supervisor
+
+                    instance_id = action.split(":", 1)[1]
+                    ok, message = get_instance_supervisor().restart_instance(instance_id)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action.startswith("instance-resource:"):
+                    from gui.instance_config import set_instance_resource_profile
+
+                    _prefix, instance_id, resource_profile = action.split(":", 2)
+                    profile = set_instance_resource_profile(instance_id, resource_profile)
+                    return f"Resource mode for {profile['name']} set to {profile['resource_profile']}."
+                if action.startswith("instance-delete:"):
+                    from gui.instance_config import delete_instance_profile
+                    from gui.instance_supervisor import get_instance_supervisor
+
+                    instance_id = action.split(":", 1)[1]
+                    live = get_instance_supervisor().list_status()
+                    if any(item["id"] == instance_id and item.get("running") for item in live):
+                        raise ValueError("Stop the instance before deleting it.")
+                    if not delete_instance_profile(instance_id):
+                        raise ValueError(f"Unknown instance '{instance_id}'.")
+                    return f"Removed instance '{instance_id}'. Its queue files were kept."
+                if action == "instance-start-all":
+                    from gui.instance_supervisor import get_instance_supervisor
+
+                    ok, message = get_instance_supervisor().start_all()
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action == "instance-pause-all":
+                    from gui.instance_supervisor import get_instance_supervisor
+                    from runtime_control import PAUSED
+
+                    ok, message = get_instance_supervisor().set_all_state(PAUSED)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action == "instance-resume-all":
+                    from gui.instance_supervisor import get_instance_supervisor
+                    from runtime_control import RUNNING
+
+                    ok, message = get_instance_supervisor().set_all_state(RUNNING)
+                    if not ok:
+                        raise ValueError(message)
+                    return message
+                if action == "instance-stop-all":
+                    from gui.instance_supervisor import get_instance_supervisor
+
+                    ok, message = get_instance_supervisor().stop_all()
                     if not ok:
                         raise ValueError(message)
                     return message

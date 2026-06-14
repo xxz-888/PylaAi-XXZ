@@ -67,10 +67,28 @@ def create_run_file():
     try:
         run_bat.write_text(contents, encoding="ascii")
         print(f"Created {run_bat.name}")
+        multi_bat = Path("Run Multi Instance.bat")
+        multi_bat.write_text(
+            "@echo off\n"
+            "cd /d %~dp0\n"
+            f"\"{sys.executable}\" multi_instance_launcher.py\n"
+            "if errorlevel 1 pause\n",
+            encoding="ascii",
+        )
+        print(f"Created {multi_bat.name}")
     except PermissionError:
         fallback = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop" / "Run PylaAi-XXZ.bat"
         fallback.write_text(contents.replace("cd /d %~dp0", f'cd /d "{Path.cwd()}"'), encoding="ascii")
         print(f"Created {fallback} because the project folder is not writable.")
+        multi_fallback = fallback.with_name("Run Multi Instance.bat")
+        multi_fallback.write_text(
+            "@echo off\n"
+            f'cd /d "{Path.cwd()}"\n'
+            f"\"{sys.executable}\" multi_instance_launcher.py\n"
+            "if errorlevel 1 pause\n",
+            encoding="ascii",
+        )
+        print(f"Created {multi_fallback}.")
 
 def remove_onnxruntime_variants():
     subprocess.run([

@@ -17,16 +17,45 @@ from typing import Any
 from utils import load_toml_as_dict, resolve_project_path, save_dict_as_toml
 
 
-INSTANCES_CONFIG_PATH = "cfg/instances.toml"
+INSTANCES_BASE_CONFIG_PATH = "cfg/instances.toml"
+INSTANCES_CONFIG_PATH = "cfg/instances.local.toml"
 INSTANCES_ROOT = "instances"
 MANIFEST_DIR = "logs/instances"
 REPLIES_DIR = "logs/instances/replies"
+MAX_INSTANCES = 8
 
 _active_instance_id: str | None = None
 
 EMULATOR_PORT_DEFAULTS = {
     "ldplayer": 5555,
     "mumu": 16384,
+}
+
+RESOURCE_PROFILES = {
+    "full": {
+        "max_ips": 0,
+        "scrcpy_max_fps": 60,
+        "scrcpy_max_width": 960,
+        "scrcpy_bitrate": 3000000,
+        "onnx_cpu_threads": 4,
+        "used_threads": 4,
+    },
+    "balanced": {
+        "max_ips": 30,
+        "scrcpy_max_fps": 30,
+        "scrcpy_max_width": 854,
+        "scrcpy_bitrate": 2200000,
+        "onnx_cpu_threads": 2,
+        "used_threads": 2,
+    },
+    "economy": {
+        "max_ips": 20,
+        "scrcpy_max_fps": 24,
+        "scrcpy_max_width": 640,
+        "scrcpy_bitrate": 1500000,
+        "onnx_cpu_threads": 1,
+        "used_threads": 1,
+    },
 }
 
 LDPLAYER_PORTS = {5555: 0, 5557: 1, 5559: 2}
@@ -93,10 +122,22 @@ def default_instances_config() -> dict[str, Any]:
 
 
 def load_instances_config() -> dict[str, Any]:
+    base = default_instances_config()
+    base_path = Path(resolve_project_path(INSTANCES_BASE_CONFIG_PATH))
+    if base_path.exists():
+        shipped = dict(load_toml_as_dict(INSTANCES_BASE_CONFIG_PATH))
+        base["multi_instance"].update(shipped.get("multi_instance") or {})
+        if isinstance(shipped.get("instances"), dict):
+            base["instances"].update(shipped["instances"])
+
     path = Path(resolve_project_path(INSTANCES_CONFIG_PATH))
-    if not path.exists():
-        return default_instances_config()
-    data = dict(load_toml_as_dict(INSTANCES_CONFIG_PATH))
+    if path.exists():
+        local = dict(load_toml_as_dict(INSTANCES_CONFIG_PATH))
+        base["multi_instance"].update(local.get("multi_instance") or {})
+        if isinstance(local.get("instances"), dict):
+            base["instances"] = dict(local["instances"])
+
+    data = base
     data.setdefault("multi_instance", {})
     data.setdefault("instances", {})
     if not isinstance(data["instances"], dict):
@@ -347,6 +388,13 @@ def normalize_instance_profile(instance_id: str, profile: dict[str, Any] | None 
     profile_index = str(profile.get("emulator_profile_index") or infer_profile_index(emulator, port))
     instance_dir = Path(INSTANCES_ROOT) / instance_id
     queue_path = str(profile.get("queue_path") or (instance_dir / "latest_brawler_data.json"))
+    resource_profile = str(profile.get("resource_profile") or "auto").strip().lower()
+    if resource_profile not in {"auto", *RESOURCE_PROFILES}:
+        resource_profile = "auto"
+    try:
+        slot = int(profile.get("slot") or 0)
+    except (TypeError, ValueError):
+        slot = 0
     return {
         "id": instance_id,
         "name": str(profile.get("name") or instance_id).strip() or instance_id,
@@ -357,6 +405,8 @@ def normalize_instance_profile(instance_id: str, profile: dict[str, Any] | None 
         "emulator_instance_name": str(profile.get("emulator_instance_name") or profile.get("name") or "").strip(),
         "player_tag": str(profile.get("player_tag") or "").strip(),
         "queue_path": queue_path.replace("\\", "/"),
+        "resource_profile": resource_profile,
+        "slot": slot,
     }
 
 
@@ -367,6 +417,11 @@ def list_instance_profiles() -> list[dict[str, Any]]:
         if not isinstance(profile, dict):
             continue
         profiles.append(normalize_instance_profile(instance_id, profile))
+    profiles.sort(key=lambda item: (
+        item["slot"] if item["slot"] > 0 else MAX_INSTANCES + 1,
+        item["name"].lower(),
+        item["id"],
+    ))
     return profiles
 
 
@@ -384,13 +439,26 @@ def get_instance_profile(instance_id: str | None) -> dict[str, Any] | None:
 def upsert_instance_profile(instance_id: str, profile: dict[str, Any]) -> dict[str, Any]:
     data = load_instances_config()
     instance_id = _slugify(instance_id or profile.get("id", ""))
+    instances = dict(data.get("instances") or {})
+    if instance_id not in instances and len(instances) >= MAX_INSTANCES:
+        raise ValueError(f"Pyla supports at most {MAX_INSTANCES} configured instances.")
+    if not profile.get("slot"):
+        used_slots = {
+            int(item.get("slot") or 0)
+            for item in instances.values()
+            if isinstance(item, dict)
+        }
+        profile = dict(profile)
+        profile["slot"] = next(
+            (slot for slot in range(1, MAX_INSTANCES + 1) if slot not in used_slots),
+            len(instances) + 1,
+        )
     normalized = normalize_instance_profile(instance_id, profile)
     collision = find_port_collision(instance_id, normalized["emulator_port"])
     if collision:
         raise ValueError(
             f"Port {normalized['emulator_port']} is already used by instance '{collision}'."
         )
-    instances = dict(data.get("instances") or {})
     instances[instance_id] = {
         "name": normalized["name"],
         "enabled": normalized["enabled"],
@@ -400,6 +468,8 @@ def upsert_instance_profile(instance_id: str, profile: dict[str, Any]) -> dict[s
         "emulator_instance_name": normalized["emulator_instance_name"],
         "player_tag": normalized["player_tag"],
         "queue_path": normalized["queue_path"],
+        "resource_profile": normalized["resource_profile"],
+        "slot": normalized["slot"],
     }
     data["instances"] = instances
     save_instances_config(data)
@@ -412,6 +482,18 @@ def set_instance_player_tag(instance_id: str, player_tag: str) -> dict[str, Any]
     if not profile:
         raise ValueError(f"Unknown instance '{instance_id}'.")
     profile["player_tag"] = str(player_tag or "").strip()
+    return upsert_instance_profile(instance_id, profile)
+
+
+def set_instance_resource_profile(instance_id: str, resource_profile: str) -> dict[str, Any]:
+    profile = get_instance_profile(instance_id)
+    if not profile:
+        raise ValueError(f"Unknown instance '{instance_id}'.")
+    resource_profile = str(resource_profile or "auto").strip().lower()
+    if resource_profile not in {"auto", *RESOURCE_PROFILES}:
+        available = ", ".join(["auto", *RESOURCE_PROFILES])
+        raise ValueError(f"Unknown resource profile '{resource_profile}'. Choose: {available}.")
+    profile["resource_profile"] = resource_profile
     return upsert_instance_profile(instance_id, profile)
 
 
@@ -481,6 +563,24 @@ def next_free_emulator_port(emulator: str, instance_id: str | None = None) -> in
     raise ValueError(f"No free ADB port available for {emulator_display_name(emulator)}.")
 
 
+def automatic_resource_profile(active_count: int) -> str:
+    active_count = max(1, int(active_count or 1))
+    if active_count == 1:
+        return "full"
+    if active_count <= 4:
+        return "balanced"
+    return "economy"
+
+
+def resource_budget(resource_profile: str = "auto", active_count: int = 1) -> tuple[str, dict[str, Any]]:
+    selected = str(resource_profile or "auto").strip().lower()
+    if selected == "auto":
+        selected = automatic_resource_profile(active_count)
+    if selected not in RESOURCE_PROFILES:
+        selected = "balanced"
+    return selected, dict(RESOURCE_PROFILES[selected])
+
+
 def _repoint_default_instance_if_missing(data: dict[str, Any]) -> dict[str, Any]:
     default_id = _slugify(str(data.get("multi_instance", {}).get("default_instance", "") or ""))
     instances = data.get("instances") or {}
@@ -509,6 +609,16 @@ def apply_instance_overrides(instance_id: str | None = None) -> dict[str, Any] |
     general["emulator_port"] = int(profile["emulator_port"])
     general["emulator_profile_index"] = str(profile["emulator_profile_index"])
     general["emulator_instance_name"] = str(profile.get("emulator_instance_name", ""))
+    try:
+        active_count = int(os.environ.get("PYLA_ACTIVE_INSTANCE_COUNT", "1") or 1)
+    except ValueError:
+        active_count = 1
+    selected_resource_profile, budget = resource_budget(
+        profile.get("resource_profile", "auto"),
+        active_count,
+    )
+    general.update(budget)
+    general["multi_instance_resource_profile"] = selected_resource_profile
     cached_toml[general_path] = general
     player_tag = str(profile.get("player_tag", "")).strip()
     if player_tag:

@@ -1,0 +1,29 @@
+XXZ MULTI INSTANCE
+
+START
+1. Create and start the LDPlayer or MuMu profiles you want to use.
+2. Run "Run Multi Instance.bat", or open the main hub and press
+   "Open Control Room" in the Instances tab.
+3. Select a detected emulator profile, enter that account's player tag,
+   choose a resource mode, and press "Add Selected Instance".
+4. Prepare a brawler queue for each instance, then use Start or Start All.
+
+CONTROLS
+- Start All, Pause All, Resume All, and Stop All control every worker.
+- Tile Windows arranges up to eight emulator windows on the primary monitor.
+- Each instance has separate player tag, queue, runtime state, and log.
+- Worker logs are stored in logs/instances/<instance-id>.log.
+
+RESOURCE MODES
+- auto: scales capture FPS, resolution, and CPU threads to the worker count.
+- full: maximum quality for one strong instance.
+- balanced: recommended for two to four instances.
+- economy: recommended for five to eight instances.
+
+NOTES
+- Only one worker owns Telegram/Discord remote-control polling. This avoids
+  duplicate commands and Telegram getUpdates conflicts.
+- Closing the control room does not stop workers. Use Stop All first when
+  you want every bot process to exit.
+- Runtime profiles and player tags are saved in cfg/instances.local.toml.
+  That file is ignored by Git.

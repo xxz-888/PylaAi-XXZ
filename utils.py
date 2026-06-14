@@ -300,6 +300,7 @@ def load_toml_as_dict(file_path):
                     resolve_project_path("cfg/telegram_config.local.toml"),
                     resolve_project_path("cfg/brawl_stars_api.local.toml"),
                     resolve_project_path("cfg/instances.toml"),
+                    resolve_project_path("cfg/instances.local.toml"),
                 }
                 runtime_names = {
                     "match_history.toml",
@@ -307,6 +308,7 @@ def load_toml_as_dict(file_path):
                     "telegram_config.local.toml",
                     "brawl_stars_api.local.toml",
                     "instances.toml",
+                    "instances.local.toml",
                 }
                 if resolved_file_path not in runtime_generated and os.path.basename(resolved_file_path) not in runtime_names:
                     raise

@@ -305,17 +305,22 @@ class HubStateStore:
     def _instances_state(self):
         try:
             from gui.instance_config import (
+                MAX_INSTANCES,
                 ensure_multi_instance_profiles,
                 is_multi_instance_enabled,
                 list_available_emulator_instances,
             )
-            from gui.instance_registry import list_instances
+            from gui.instance_supervisor import get_instance_supervisor
 
             ensure_multi_instance_profiles()
+            items = get_instance_supervisor().list_status()
             return {
                 "enabled": is_multi_instance_enabled(),
-                "items": list_instances(),
+                "items": items,
                 "available": list_available_emulator_instances(),
+                "max_instances": MAX_INSTANCES,
+                "configured_count": len(items),
+                "running_count": sum(1 for item in items if item.get("running")),
             }
         except Exception as exc:
             return {

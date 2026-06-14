@@ -34,6 +34,30 @@ class TrophyObserverTests(unittest.TestCase):
 
         self.assertEqual(observer.win_streak, 0)
 
+    def test_trio_showdown_first_place_does_not_double_count_win_streak(self):
+        observer = TrophyObserver(["bea"])
+        observer.current_trophies = 154
+        observer.current_wins = 8
+        observer.win_streak = 8
+
+        with patch.object(observer, "save_history"), patch.object(observer, "_write_trophy_log"):
+            observer.add_trophies("1st", "bea")
+
+        self.assertEqual(observer.win_streak, 9)
+        self.assertEqual(observer.current_trophies, 165)
+
+    def test_trio_showdown_second_place_does_not_double_count_win_streak(self):
+        observer = TrophyObserver(["bea"])
+        observer.current_trophies = 154
+        observer.current_wins = 8
+        observer.win_streak = 8
+
+        with patch.object(observer, "save_history"), patch.object(observer, "_write_trophy_log"):
+            observer.add_trophies("2nd", "bea")
+
+        self.assertEqual(observer.win_streak, 9)
+        self.assertEqual(observer.current_trophies, 159)
+
     def test_win_streak_bonus_never_goes_negative(self):
         observer = TrophyObserver(["shelly"])
         observer.current_trophies = 100

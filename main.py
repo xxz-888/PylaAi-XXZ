@@ -396,7 +396,10 @@ def pyla_main(data):
             self.last_consumed_state_sequence = 0
             self.state_detection_worker.start()
             self.disconnect_ocr_interval = 6.0
-            self.control_window = RuntimeControlWindow()
+            show_control_window = os.environ.get("PYLA_HEADLESS_CONTROL", "").strip().lower() not in {
+                "1", "true", "yes",
+            }
+            self.control_window = RuntimeControlWindow(show_window=show_control_window)
             self.control_window.start()
             self.instance_id = os.environ.get("PYLA_INSTANCE_ID", "").strip()
             if self.instance_id:
@@ -425,14 +428,21 @@ def pyla_main(data):
                 back_callback=self.window_controller.android_back,
                 status_provider=self.telegram_status,
             )
-            self.discord_control.start()
+            owns_remote_control = os.environ.get("PYLA_REMOTE_CONTROL_OWNER", "1").strip().lower() not in {
+                "0", "false", "no",
+            }
+            if owns_remote_control:
+                self.discord_control.start()
             self.telegram_control = TelegramControlServer(
                 self.control_window.state_path,
                 screenshot_provider=self.window_controller.screenshot,
                 restart_game_callback=self.restart_brawl_stars,
                 status_provider=self.telegram_status,
             )
-            self.telegram_control.start()
+            if owns_remote_control:
+                self.telegram_control.start()
+            elif self.instance_id:
+                print("Remote control polling is owned by another multi-instance worker.")
             self.was_paused = False
             self.pause_started_at = None
 

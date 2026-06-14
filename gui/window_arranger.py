@@ -37,6 +37,14 @@ def _usable_area() -> tuple[int, int, int, int]:
     if os.name != "nt":
         return 0, 0, 1600, 900
     user32 = ctypes.windll.user32
+    work_area = ctypes.wintypes.RECT()
+    if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work_area), 0):
+        return (
+            int(work_area.left),
+            int(work_area.top),
+            int(work_area.right),
+            int(work_area.bottom),
+        )
     return (
         0,
         0,

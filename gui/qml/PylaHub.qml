@@ -1121,6 +1121,7 @@ ApplicationWindow {
                         }
                     }
                     ActionRow {
+                        HubButton { label: "Open Control Room"; onClicked: root.runAction("instance-open-launcher") }
                         HubButton { label: "Fetch Instances"; secondary: true; onClicked: root.reloadState() }
                         HubButton { label: "Align Windows"; secondary: true; onClicked: root.runAction("instance-align-windows") }
                     }
